@@ -1,0 +1,13 @@
+{
+  "books": [
+    {
+      "id": 1,
+      "title": "The Economy and the Dispensing of God",
+      "author": "Witness Lee",
+      "price": "Free",
+      "coverImage": "store/covers/economy-of-god.jpg",
+      "description": "A foundational ministry book exploring God's eternal economy.",
+      "downloadUrl": "store/files/economy-of-god.pdf"
+    }
+  ]
+}
