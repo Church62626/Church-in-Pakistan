@@ -6,6 +6,11 @@
       "date": "2026-11-15",
       "time": "10:00 AM",
       "location": "Main Church Hall, Islamabad",
+      "googleMapUrl": "https://maps.google.com/?q=Main+Church+Hall+Islamabad",
+      "coordinates": {
+        "lat": 33.6844,
+        "lng": 73.0479
+      },
       "description": "Join us for a weekend of rich fellowship and ministry sharing.",
       "bannerImage": "events/banners/conference-2026.jpg"
     }
