@@ -708,5 +708,30 @@ ok('nav treats library, list AND listen as language-aware',
   /wantsLanguage = \['library', 'list', 'listen'\]/.test(nav))
 ok('nav applies the new language to the store', /setActiveLanguage\(key\)/.test(nav))
 
+console.log('\n--- 21. hosting cache headers: deploys must be visible ---')
+// Regression guard. A stale cached index.html points at the PREVIOUS hashed
+// bundle, so the browser keeps running old code and every deploy appears to be
+// ignored. This silently cost a full round of "the fix did not work" reports.
+const fb = JSON.parse(read('./firebase.json'))
+const host = fb.hosting
+const headerRules = host.headers || []
+// The SPA rewrite serves index.html for every unmatched path, so the
+// no-store rule has to cover the catch-all as well as the literal file.
+const indexRule = headerRules.find((r) => r.source === '**') ||
+  headerRules.find((r) => r.source === '/index.html')
+ok('firebase.json defines hosting headers', headerRules.length > 0)
+ok('the no-store rule covers the SPA catch-all', Boolean(indexRule), JSON.stringify(headerRules.map((r) => r.source)))
+const indexCache = (indexRule?.headers || [])
+  .find((h) => h.key === 'Cache-Control')?.value || ''
+ok('index.html is sent no-store', /no-store/.test(indexCache), indexCache)
+ok('...and no-cache', /no-cache/.test(indexCache), indexCache)
+ok('...and must-revalidate', /must-revalidate/.test(indexCache), indexCache)
+const assetRule = headerRules.find((r) => r.source === '/assets/**')
+const assetCache = (assetRule?.headers || [])
+  .find((h) => h.key === 'Cache-Control')?.value || ''
+// Content-hashed filenames mean a long immutable cache is safe for assets.
+ok('hashed assets are cached immutably', /immutable/.test(assetCache), assetCache)
+ok('the SPA rewrite is preserved', Array.isArray(host.rewrites) && host.rewrites.length > 0)
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
