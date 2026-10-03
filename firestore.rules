@@ -34,6 +34,11 @@ service cloud.firestore {
 
     // Premium catalogue: the same anonymous-write, never-readable pattern.
     // These hold names and contact details, so reads stay closed.
+    // Premium catalogue. Publicly readable, but ONLY published entries, so a
+    // draft never reaches the browser. The client query filters on `language`
+    // alone (a single-field index, which always exists) and applies the
+    // `published` check itself - a client-side filter is not a security
+    // boundary, so this rule is what actually keeps drafts private.
     match /premiumBooks/{id} {
       allow read: if resource.data.published == true;
       allow write: if false; // written by the Admin SDK

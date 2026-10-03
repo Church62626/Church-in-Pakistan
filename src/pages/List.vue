@@ -1,10 +1,10 @@
-﻿<template>
+<template>
   <div class="reader-page">
     <div class="reader-container">
       <!-- Floating reader controls -->
       <div class="reader-toolbar">
         <router-link to="/library" class="toolbar-back">
-          <span aria-hidden="true">â†</span>
+          <span aria-hidden="true">←</span>
           Back to Library
         </router-link>
 
@@ -122,7 +122,7 @@
           <span v-if="lang.native !== lang.label" class="lang-native" :lang="lang.lang">
             {{ lang.native }}
           </span>
-          <span v-if="!lang.published" class="lang-pending" aria-hidden="true" title="Content not published yet">â€¢</span>
+          <span v-if="!lang.published" class="lang-pending" aria-hidden="true" title="Content not published yet">•</span>
         </button>
       </nav>
 
@@ -149,21 +149,21 @@
 
       <!-- No hymn id in the route: hide the player and the lyrics area entirely -->
       <div v-if="!hasId" class="reader-empty glass-card">
-        <span class="empty-icon" aria-hidden="true">ðŸ“–</span>
+        <span class="empty-icon" aria-hidden="true">📖</span>
         <h2 class="empty-title">Please select a Hymn from the Library</h2>
         <p class="empty-text">
           This page needs a hymn number. Open the Library, pick a book, then choose a hymn
           to read its lyrics and play its audio.
         </p>
         <router-link to="/library" class="empty-cta">
-          <span aria-hidden="true">ðŸ“š</span>
+          <span aria-hidden="true">📚</span>
           Browse Hymns / Geet
         </router-link>
       </div>
 
       <template v-else>
       <p v-if="isSample" class="reader-notice">
-        Showing the bundled sample â€” the GitHub lyric files for this language have not been
+        Showing the bundled sample — the GitHub lyric files for this language have not been
         published yet.
       </p>
 
@@ -197,8 +197,8 @@
             @click="togglePlay"
           >
             <span v-if="isBusy" class="spin" aria-hidden="true" />
-            <span v-else-if="!isPlaying" class="play-icon">â–¶</span>
-            <span v-else class="pause-icon">â¸</span>
+            <span v-else-if="!isPlaying" class="play-icon">▶</span>
+            <span v-else class="pause-icon">⏸</span>
           </button>
 
           <div class="audio-info">
@@ -681,7 +681,7 @@ async function verifyMp3(list) {
 
     if (token !== mp3Token) return
     currentAudioUrl.value = ''
-    audioStatus.value = `No ${modeLabel.value} file could be loaded for hymn â€œ${requestedId.value.trim()}â€.`
+    audioStatus.value = `No ${modeLabel.value} file could be loaded for hymn “${requestedId.value.trim()}”.`
   } finally {
     // Always release the spinner, on every path including a timeout.
     if (token === mp3Token) mp3Loading.value = false
@@ -699,7 +699,7 @@ async function loadMidi(list) {
 
   midiLoading.value = true
   midiReady.value = false
-  midiStatus('Preparing musicâ€¦')
+  midiStatus('Preparing music…')
 
   try {
     for (const url of list) {
@@ -721,7 +721,7 @@ async function loadMidi(list) {
         currentTime.value = 0
         duration.value = parsed.duration
         midiStatus(
-          `${parsed.notes.length} notes Â· ${instrumentLabel(instrument.value)} Â· rendered in your browser`
+          `${parsed.notes.length} notes · ${instrumentLabel(instrument.value)} · rendered in your browser`
         )
         return
       } catch (err) {
@@ -734,7 +734,7 @@ async function loadMidi(list) {
     // Every candidate failed: report it. The finally block still clears the
     // spinner, so the button is immediately retryable.
     midiReady.value = false
-    midiStatus(`No ${modeLabel.value} file could be loaded for hymn â€œ${requestedId.value.trim()}â€.`)
+    midiStatus(`No ${modeLabel.value} file could be loaded for hymn “${requestedId.value.trim()}”.`)
   } finally {
     if (token === midiLoadToken) midiLoading.value = false
   }
@@ -747,7 +747,7 @@ function midiStatus(message) {
 function onInstrumentChange() {
   midi.setInstrument(instrument.value)
   if (midiReady.value) {
-    midiStatus(`${instrumentLabel(instrument.value)} Â· rendered in your browser`)
+    midiStatus(`${instrumentLabel(instrument.value)} · rendered in your browser`)
   }
 }
 
@@ -778,7 +778,7 @@ function onAudioError() {
   // Every candidate has now failed: report it and leave the transport idle
   // rather than spinning forever.
   mp3Loading.value = false
-  audioStatus.value = `No ${modeLabel.value} file found for hymn â€œ${requestedId.value.trim()}â€.`
+  audioStatus.value = `No ${modeLabel.value} file found for hymn “${requestedId.value.trim()}”.`
 }
 
 /**
@@ -795,7 +795,7 @@ async function togglePlay() {
     // so a transient network failure is recoverable from the same button.
     const id = requestedId.value.trim()
     if (id) {
-      audioStatus.value = 'Retryingâ€¦'
+      audioStatus.value = 'Retrying…'
       applyAudioSource()
     }
     return

@@ -54,7 +54,9 @@ export function shapePremiumBook(doc, language) {
     description: String(d.description ?? '').trim(),
     coverUrl: String(d.coverUrl ?? ''),
     highlights: Array.isArray(d.highlights) ? d.highlights.filter(Boolean).map(String) : [],
-    available: d.available !== false
+    available: d.available !== false,
+    // Absent `published` means a draft, which must stay hidden.
+    published: d.published === true
   }
 }
 
@@ -62,9 +64,22 @@ export function shapePremiumBook(doc, language) {
  * fetchPremiumBooks(language, { db })
  * -> { language, books, problem, source }
  *
- * Resolves even when Firestore is unavailable or empty: `books` is always an
- * array and `problem` explains an empty result, so the caller renders an honest
- * "coming soon" state instead of crashing or inventing content.
+ * Resolves even when Firestore is unavailable: `books` is always an array and
+ * `problem` explains an empty result, so the caller renders an honest state
+ * instead of crashing or inventing content.
+ *
+ * ## Why the query is deliberately simple
+ *
+ * The first version chained two `where` filters with an `orderBy`, which
+ * requires a Firestore *composite* index. No such index existed, so Firestore
+ * rejected every read with FAILED_PRECONDITION ("query requires an index") and
+ * the catch block reported it as "catalogue could not be loaded" - hiding a
+ * configuration mistake behind a "coming soon" message.
+ *
+ * Single-field `where` clauses use the automatic single-field indexes that
+ * Firestore always provides. Sorting is done in memory, which is free at this
+ * scale (a premium catalogue is tens of documents, not thousands) and removes
+ * an entire class of deployment dependency.
  */
 export async function fetchPremiumBooks(language, { db = null } = {}) {
   const lang = language || 'urdu'
@@ -72,27 +87,27 @@ export async function fetchPremiumBooks(language, { db = null } = {}) {
   if (cache.has(key)) return cache.get(key)
 
   if (!db) {
-    const empty = {
-      language: lang,
-      books: [],
-      problem: 'unavailable',
-      source: null
-    }
+    const empty = { language: lang, books: [], problem: 'unavailable', source: null }
     cache.set(key, empty)
     return empty
   }
 
   try {
-    const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore')
+    const { collection, query, where, getDocs } = await import('firebase/firestore')
     const snap = await getDocs(
       query(
         collection(db, PREMIUM_COLLECTION),
-        where('language', '==', lang),
-        where('published', '==', true),
-        orderBy('title')
+        where('language', '==', lang)
       )
     )
-    const books = snap.docs.map((d) => shapePremiumBook(d, lang))
+
+    // Filtering and ordering client-side: `published` may legitimately be
+    // absent on a draft document, and absent must not mean "visible".
+    const books = snap.docs
+      .map((d) => shapePremiumBook(d, lang))
+      .filter((b) => b.published)
+      .sort((a, b) => a.title.localeCompare(b.title))
+
     const result = {
       language: lang,
       books,
@@ -104,8 +119,22 @@ export async function fetchPremiumBooks(language, { db = null } = {}) {
     cache.set(key, result)
     return result
   } catch (err) {
-    console.warn('premium books unavailable:', err.message)
-    const failed = { language: lang, books: [], problem: 'unavailable', source: null }
+    // A missing index is a deployment problem, not an empty catalogue, and the
+    // two must not be conflated - the first is actionable, the second is not.
+    const missingIndex = err?.code === 'failed-precondition' ||
+      /requires an index/i.test(err?.message || '')
+    console.warn(
+      missingIndex
+        ? 'premium books: missing Firestore index (see README) -'
+        : 'premium books unavailable:',
+      err?.message || err
+    )
+    const failed = {
+      language: lang,
+      books: [],
+      problem: missingIndex ? 'index-missing' : 'unavailable',
+      source: null
+    }
     cache.set(key, failed)
     return failed
   }
@@ -114,8 +143,13 @@ export async function fetchPremiumBooks(language, { db = null } = {}) {
 /** Copy for the empty state. Says why, without pretending to know a date. */
 export function premiumEmptyMessage(language, problem) {
   const label = getLanguage(language)?.label ?? language
+  if (problem === 'index-missing') {
+    // Distinct from "unavailable": this is a deployment mistake, not a network
+    // blip, and it should not be dressed up as "please try again shortly".
+    return 'The premium catalogue is not set up correctly yet. Please contact the church.'
+  }
   if (problem === 'unavailable') {
-    return `The premium catalogue could not be loaded. Please try again shortly.`
+    return 'The premium catalogue could not be loaded. Please try again shortly.'
   }
   return `Premium ${label} books are not available yet. Please check back soon.`
 }

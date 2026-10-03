@@ -558,5 +558,51 @@ for (const lang of hymnSync.SUPPORTED.map((l) => l.key)) {
 eq('no document id collides across all four languages', dupes, 0)
 ok('the corpus is substantial', ids.size > 2000, String(ids.size))
 
+/* ---- 16. premium books: the index bug must not come back ---- */
+console.log('\n--- 16. premium books empty state ---')
+const prem = await import('./src/js/premiumService.js')
+const premSrc = read('./src/js/premiumService.js')
+
+// The original bug: a two-where + orderBy query needs a composite index that
+// did not exist, so every read failed with FAILED_PRECONDITION and the UI
+// showed "could not be loaded" instead of the honest empty state.
+//
+// The assertion is scoped to the live query expression (everything between the
+// first `query(` and the closing `)` of that call) so the comment above, which
+// documents the old query on purpose, is not mistaken for executable code.
+const qStart = premSrc.indexOf('query(')
+const queryExpr = premSrc.slice(qStart, premSrc.indexOf(')', premSrc.indexOf('lang)', qStart)) + 1)
+ok('the executed query does NOT use orderBy', !/orderBy/.test(queryExpr), queryExpr)
+ok('the executed query uses exactly one where clause',
+  (queryExpr.match(/\bwhere\(/g) || []).length === 1, queryExpr)
+ok('...filtering on language', /where\('language', '==', lang\)/.test(queryExpr))
+ok('it filters `published` in memory', /\.filter\(\(b\) => b\.published\)/.test(premSrc))
+ok('it sorts in memory', /localeCompare/.test(premSrc))
+ok('a missing index is reported as its own problem',
+  /index-missing/.test(premSrc))
+ok('...and is not confused with an empty catalogue',
+  /failed-precondition/.test(premSrc))
+
+eq('an absent `published` is treated as a draft',
+  prem.shapePremiumBook({ title: 'x' }).published, false)
+eq('an explicit published:true is visible',
+  prem.shapePremiumBook({ title: 'x', published: true }).published, true)
+
+const premNoDb = await prem.fetchPremiumBooks('urdu', { db: null })
+ok('a missing db never throws', premNoDb.books.length === 0)
+ok('...and reports why', premNoDb.problem === 'unavailable', premNoDb.problem)
+
+ok('the empty state says "not available yet", not "could not load"',
+  /not available yet/.test(prem.premiumEmptyMessage('urdu', 'empty')))
+ok('an index failure gets its own honest message',
+  /not set up correctly/.test(prem.premiumEmptyMessage('urdu', 'index-missing')))
+ok('a network failure still says "try again"',
+  /try again shortly/.test(prem.premiumEmptyMessage('urdu', 'unavailable')))
+ok('the three problems give three different messages',
+  new Set(['empty', 'index-missing', 'unavailable']
+    .map((p) => prem.premiumEmptyMessage('urdu', p))).size === 3)
+// The empty state must be a real state, never a fabricated book.
+ok('an empty result never invents a book', premNoDb.books.length === 0)
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

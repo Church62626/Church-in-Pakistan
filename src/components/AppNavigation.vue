@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <nav class="glass-nav">
     <div class="nav-container">
       <!-- Logo -->
@@ -107,7 +107,7 @@
               aria-label="Close"
               @click="logoOpen = false"
             >
-              <span aria-hidden="true">âœ•</span>
+              <span aria-hidden="true">✕</span>
             </button>
 
             <img :src="logoImage" alt="Church in Pakistan Logo" class="logo-modal-img" />
@@ -117,13 +117,13 @@
 
             <nav class="logo-links" aria-label="Church information">
               <router-link to="/about" class="logo-link" @click="logoOpen = false">
-                <span aria-hidden="true">â„¹ï¸</span> About Us
+                <span aria-hidden="true">ℹ️</span> About Us
               </router-link>
               <a
                 class="logo-link"
                 :href="`mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('Feedback - Lord\'s Recovery Church app')}`"
               >
-                <span aria-hidden="true">âœ‰ï¸</span> Feedback
+                <span aria-hidden="true">✉️</span> Feedback
               </a>
             </nav>
           </div>
@@ -168,14 +168,14 @@ setActiveLanguage(language.value)
 const user = ref(null)
 
 const navItems = [
-  { title: 'Home', to: '/', icon: 'ðŸ ' },
-  { title: 'List', to: '/list', icon: 'ðŸŽµ' },
+  { title: 'Home', to: '/', icon: '🏠' },
+  { title: 'List', to: '/list', icon: '🎵' },
   { title: 'Listen', to: '/listen', icon: '🎧' },
 
-  { title: 'Library', to: '/library', icon: 'ðŸ“š' },
-  { title: 'Store', to: '/store', icon: 'ðŸ›ï¸' },
-  { title: 'Events', to: '/events', icon: 'ðŸ“…' },
-  { title: 'About', to: '/about', icon: 'â„¹ï¸' }
+  { title: 'Library', to: '/library', icon: '📚' },
+  { title: 'Store', to: '/store', icon: '🛍️' },
+  { title: 'Events', to: '/events', icon: '📅' },
+  { title: 'About', to: '/about', icon: 'ℹ️' }
 ]
 
 /** Keep the whole app on one language, and reflect it in the URL when the

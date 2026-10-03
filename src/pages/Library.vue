@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="library-page">
     <div class="container">
       <header class="library-header">
@@ -66,7 +66,7 @@
                 <p class="card-summary">{{ book.blurb }}</p>
 
                 <button type="button" class="card-read-btn" @click="toggleBook(book.key)">
-                  <span aria-hidden="true">ðŸ“–</span>
+                  <span aria-hidden="true">📖</span>
                   {{ openBook === book.key ? 'Close book' : 'Open book' }}
                 </button>
 
@@ -76,7 +76,7 @@
                   v-if="openBook === book.key"
                   class="open-pointer"
                   aria-hidden="true"
-                >â–¼</span>
+                >▼</span>
               </div>
             </article>
           </div>
@@ -104,7 +104,7 @@
               :key="book.id"
               class="pdf-row glass-card"
             >
-              <div class="pdf-icon" aria-hidden="true">ðŸ“•</div>
+              <div class="pdf-icon" aria-hidden="true">📕</div>
 
               <div class="pdf-body">
                 <h3
@@ -132,7 +132,7 @@
                   rel="noopener noreferrer"
                   :aria-label="`View ${book.title} (PDF)`"
                 >
-                  <span aria-hidden="true">ðŸ‘</span> View
+                  <span aria-hidden="true">👁</span> View
                 </a>
                 <a
                   class="pdf-btn"
@@ -140,7 +140,7 @@
                   download
                   :aria-label="`Download ${book.title} (PDF)`"
                 >
-                  <span aria-hidden="true">â¬‡</span> Download
+                  <span aria-hidden="true">⬇</span> Download
                 </a>
               </div>
             </li>
@@ -166,7 +166,7 @@
 
           <ul v-else class="pdf-list">
             <li v-for="book in premiumBooks" :key="book.id" class="pdf-row glass-card">
-              <div class="pdf-icon" aria-hidden="true">ðŸ”’</div>
+              <div class="pdf-icon" aria-hidden="true">🔒</div>
 
               <div class="pdf-body">
                 <h3
@@ -215,7 +215,7 @@
             <p class="premium-form-sub">
               {{ requestedBook.title }}
               <span v-if="requestedBook.price">
-                â€” {{ formatPrice(requestedBook.price, requestedBook.currency) }}
+                — {{ formatPrice(requestedBook.price, requestedBook.currency) }}
               </span>
             </p>
 
@@ -262,7 +262,7 @@
               <span class="section-count">{{ activeBook.count }}</span>
             </h2>
             <button type="button" class="back-btn" @click="openBook = null">
-              â† All books
+              ← All books
             </button>
           </div>
 
@@ -311,7 +311,7 @@
                       >
                         {{ hymn.title }}
                       </span>
-                      <span class="hymn-cta" aria-hidden="true">Read â†’</span>
+                      <span class="hymn-cta" aria-hidden="true">Read →</span>
                     </router-link>
                   </li>
                 </ul>
@@ -337,7 +337,7 @@
                 >
                   {{ hymn.title }}
                 </span>
-                <span class="hymn-cta" aria-hidden="true">Read â†’</span>
+                <span class="hymn-cta" aria-hidden="true">Read →</span>
               </router-link>
             </li>
           </ul>
@@ -509,7 +509,7 @@ async function submitRequest() {
     }
     const docRef = await addDoc(collection(db, 'bookRequests'), payload)
     // The returned id is the user's reference - shown so they can quote it.
-    premiumReference.value = docRef && docRef.id ? docRef.id.slice(0, 8).toUpperCase() : 'â€”'
+    premiumReference.value = docRef && docRef.id ? docRef.id.slice(0, 8).toUpperCase() : '—'
     premiumSubmitOk.value = true
   } catch (err) {
     // Surface the reason without leaking a raw Firestore error code.
