@@ -1,1 +1,13 @@
-
+{
+  "events": [
+    {
+      "id": 1,
+      "title": "Annual Regional Conference",
+      "date": "2026-11-15",
+      "time": "10:00 AM",
+      "location": "Main Church Hall, Islamabad",
+      "description": "Join us for a weekend of rich fellowship and ministry sharing.",
+      "bannerImage": "events/banners/conference-2026.jpg"
+    }
+  ]
+}
