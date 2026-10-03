@@ -186,16 +186,42 @@ ok('...all populated',
   enCat.books.every((b) => b.count > 0),
   JSON.stringify(enCat.books.map((b) => `${b.key}:${b.count}`)))
 
-console.log('\n--- 10. corrupt upstream JSON is reported, never masked ---')
-// roman-urdu/newsong_ru.json contains a raw TAB inside a string literal.
-let corrupt = null
-try { await fetchHymn('newsong', '6', 'roman-urdu') } catch (e) { corrupt = e }
-eq('code = HYMN_DATA_INVALID', corrupt && corrupt.code, 'HYMN_DATA_INVALID')
-ok('message says the file is not valid JSON',
-  Boolean(corrupt) && /not valid JSON/.test(corrupt.message), corrupt && corrupt.message)
-ok('did NOT silently fall through to hymns_ru.json',
-  Boolean(corrupt) && !corrupt.attempts.some((a) => a.includes('hymns_ru.json')),
-  corrupt && JSON.stringify(corrupt.attempts))
+console.log('\n--- 10. corrupt upstream JSON is repaired, not masked ---')
+// roman-urdu/newsong_ru.json contains a raw TAB inside a string literal, which
+// JSON forbids. The read path strips it in memory, so the file now loads and
+// its ~50 hymns are reachable. It must still be the real file - never a silent
+// fall-through to a different category.
+const ruNewsong = await fetchHymn('newsong', '6', 'roman-urdu')
+ok('the repaired file now loads', Boolean(ruNewsong), 'returned nothing')
+ok('...with real lyrics', Array.isArray(ruNewsong?.verses) && ruNewsong.verses.length > 0,
+  JSON.stringify(ruNewsong?.verses?.length))
+ok('served from newsong_ru.json, not a fallback',
+  /newsong_ru\.json/.test(ruNewsong?.sourceUrl || ''), ruNewsong?.sourceUrl)
+// `category` is the display label ("New Songs"), so the sourceUrl above is
+// what proves the right book was used.
+ok('...and is labelled as a New Song',
+  /new song/i.test(ruNewsong?.category || ''), String(ruNewsong?.category))
+// The sanitiser must be narrow: newlines carry the stanza layout.
+const C = String.fromCharCode
+ok('sanitiseLyricJson replaces a TAB with a space',
+  svc.sanitiseLyricJson(`a${C(9)}b`) === 'a b')
+ok('sanitiseLyricJson preserves newlines',
+  svc.sanitiseLyricJson(`a${C(10)}b`) === `a${C(10)}b`)
+ok('sanitiseLyricJson preserves Urdu text',
+  svc.sanitiseLyricJson('اردو: سلام') === 'اردو: سلام')
+// A genuinely unparseable file must STILL be reported. The repair is narrow on
+// purpose, so anything it cannot fix must not be papered over.
+const { mkdtempSync, rmSync, writeFileSync: writeTmp } = await import('node:fs')
+const osMod = await import('node:os')
+const pathMod = await import('node:path')
+const tmpDir = mkdtempSync(pathMod.join(osMod.tmpdir(), 'hymn-'))
+const badFile = pathMod.join(tmpDir, 'bad.json')
+writeTmp(badFile, '{"1": {"id": "1", "title": "unterminated', 'utf8')
+try { JSON.parse(svc.sanitiseLyricJson(read(badFile))) } catch (e) {
+  ok('truly broken JSON is still rejected after sanitising',
+    /JSON|token|unterminated/i.test(e.message), e.message)
+}
+rmSync(tmpDir, { recursive: true, force: true })
 
 console.log('\n--- 11. original bug: empty id no longer produces a 404 attempt ---')
 let emptyErr = null

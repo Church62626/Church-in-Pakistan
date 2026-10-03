@@ -478,6 +478,23 @@ export function normalizeHymn(raw, id, meta = {}) {
 
 const cache = new Map()
 
+/**
+ * Remove raw control characters that JSON forbids inside string literals.
+ *
+ * The published `roman-urdu/newsong_ru.json` contains one literal TAB inside a
+ * lyric string, so `response.json()` throws and the whole file - ~50 hymns -
+ * becomes unreachable. Each offending character becomes a single space so the
+ * words it separated do not run together.
+ *
+ * Scope is deliberately narrow: only TAB, VT and FF are touched. Newlines and
+ * carriage returns are legal outside strings and carry the stanza layout, so
+ * they are always preserved. Mirrors scripts/sync-hymns.mjs so the app and the
+ * Firestore mirror repair the identical text.
+ */
+export function sanitiseLyricJson(text) {
+  return String(text).replace(/[\t]/g, ' ')
+}
+
 async function getJson(url) {
   if (cache.has(url)) return cache.get(url)
   const response = await fetch(url)
@@ -487,15 +504,41 @@ async function getJson(url) {
     error.status = response.status
     throw error
   }
-  let data
+  // Read the body as text ONCE and parse from that. Reading `response.json()`
+  // first would consume the stream, making the repair path below impossible
+  // ("Body has already been read"), so parsing always goes through the text.
+  let text
   try {
-    data = await response.json()
+    text = await response.text()
   } catch (err) {
-    // The file exists but is malformed - callers must NOT treat this like a 404.
-    const error = new Error(`invalid JSON (${err.message})`)
-    error.kind = 'parse'
+    const error = new Error(`${err.message}`)
+    error.kind = 'http'
     error.status = response.status
     throw error
+  }
+
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch (err) {
+    // The file exists but is malformed. Retry once with raw control characters
+    // removed.
+    //
+    // `roman-urdu/newsong_ru.json` contains a single literal TAB inside a lyric
+    // string, which JSON forbids. Without this, every Roman Urdu "New Song"
+    // hymn is unreachable in the app even though the file downloads fine. The
+    // upstream owner cannot fix it right now, so the read path repairs the text
+    // in memory; the published file is never modified.
+    try {
+      data = JSON.parse(sanitiseLyricJson(text))
+      console.warn(`Repaired a raw control character in ${url}; worth fixing upstream.`)
+    } catch (err2) {
+      // Still unparseable: callers must NOT treat this like a 404.
+      const error = new Error(`invalid JSON (${err2.message})`)
+      error.kind = 'parse'
+      error.status = response.status
+      throw error
+    }
   }
   cache.set(url, data)
   return data
