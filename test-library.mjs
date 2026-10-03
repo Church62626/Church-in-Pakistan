@@ -604,5 +604,47 @@ ok('the three problems give three different messages',
 // The empty state must be a real state, never a fabricated book.
 ok('an empty result never invents a book', premNoDb.books.length === 0)
 
+/* ---- 17. corrupt upstream JSON is sanitised, not skipped ---- */
+console.log('\n--- 17. sync-hymns: upstream JSON sanitiser ---')
+const CH = String.fromCharCode
+const TAB = CH(9)
+const VT = CH(11)
+const FF = CH(12)
+const NL = CH(10)
+const CR = CH(13)
+const NUL = CH(0)
+
+ok('sanitiseJsonText is exported', typeof hymnSync.sanitiseJsonText === 'function')
+// A raw TAB is what makes newsong_ru.json unparseable; it must be repaired.
+eq('a raw TAB becomes a space', hymnSync.sanitiseJsonText(`a${TAB}b`), 'a b')
+eq('a vertical tab becomes a space', hymnSync.sanitiseJsonText(`a${VT}b`), 'a b')
+eq('a form feed becomes a space', hymnSync.sanitiseJsonText(`a${FF}b`), 'a b')
+// Over-reach would destroy the stanza layout, so these must survive intact.
+eq('line feeds are preserved', hymnSync.sanitiseJsonText(`a${NL}b`), `a${NL}b`)
+eq('CRLF is preserved', hymnSync.sanitiseJsonText(`a${CR}${NL}b`), `a${CR}${NL}b`)
+eq('other control chars are left alone', hymnSync.sanitiseJsonText(`a${NUL}b`), `a${NUL}b`)
+eq('ASCII is untouched', hymnSync.sanitiseJsonText('plain text'), 'plain text')
+eq('non-Latin text is untouched',
+  hymnSync.sanitiseJsonText('اردو: سلام'), 'اردو: سلام')
+eq('a clean file is byte-identical', hymnSync.sanitiseJsonText('{"a":1}'), '{"a":1}')
+
+// The repaired text must actually parse, and the words the tab separated must
+// stay separate rather than being run together.
+const corruptDoc = `{"1":{"id":"1","title":"T","content":["a${TAB}b","line2"]}}`
+let parsed = null
+try { parsed = JSON.parse(hymnSync.sanitiseJsonText(corruptDoc)) } catch { /* expected below */ }
+ok('sanitised text parses', parsed !== null)
+eq('the words stay separated', parsed['1'].content[0], 'a b')
+eq('the rest of the lyric is unchanged', parsed['1'].content[1], 'line2')
+
+console.log('\n--- 17b. roman-urdu newsong now loads for real ---')
+const ruNewsong = await hymnSync.fetchEntries('roman-urdu', 'newsong')
+eq('the file no longer reports a problem', ruNewsong.problem, null)
+eq('...and yields the full batch', ruNewsong.entries.length, 50)
+ok('every entry has lyrics', ruNewsong.entries.every((e) =>
+  Array.isArray(e.content) && e.content.length > 0))
+ok('no raw TAB survives into the lyrics',
+  !ruNewsong.entries.some((e) => JSON.stringify(e).includes(TAB)))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

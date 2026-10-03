@@ -172,7 +172,36 @@ export function loadServiceAccount(credPath) {
 /* --- fetch + flatten ------------------------------------------------------ */
 
 /**
- * A source file that fails to parse is reported and skipped, never guessed at.
+ * Strip raw control characters that JSON forbids inside string literals.
+ *
+ * WHY THIS EXISTS
+ * `Hymns-contents/roman-urdu/newsong_ru.json` contains a single literal TAB
+ * (U+0009) inside a lyric string - "...tu mujhe dil mein rakh<TAB>tera saccha
+ * aashq rahoon". JSON does not allow unescaped control characters in strings,
+ * so `JSON.parse` throws "Bad control character in string literal" and the
+ * whole file is skipped, costing ~50 Roman Urdu hymns in the mirror.
+ *
+ * The upstream owner cannot currently fix it, so the read path repairs the
+ * text in memory. The file on GitHub is untouched; only our parse is affected.
+ *
+ * SCOPE - deliberately narrow
+ * Only U+0009 (TAB), U+000B and U+000C are removed, and each becomes a single
+ * space. Everything else is left exactly as published, because:
+ *  - \n and \r are legal outside strings and carry the file's real formatting,
+ *    so stripping them would destroy the stanza layout;
+ *  - replacing with a space rather than deleting keeps the two words that the
+ *    stray tab separated apart, instead of running them together.
+ *
+ * A file that already parses is never modified.
+ */
+export function sanitiseJsonText(text) {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\t]/g, ' ')
+}
+
+/**
+ * A source file that fails to parse is repaired once (see sanitiseJsonText)
+ * and reported if it still cannot be read. Nothing is ever guessed at.
  */
 export async function fetchEntries(language, category, fetchImpl = fetch) {
   const spec = SUPPORTED.find((l) => l.key === language)
@@ -187,9 +216,26 @@ export async function fetchEntries(language, category, fetchImpl = fetch) {
   try {
     data = JSON.parse(text)
   } catch (err) {
-    // Reported, never silently skipped: a corrupt upstream file is a real bug
-    // and must be fixed in the lyrics repo, not papered over here.
-    return { entries: [], url, problem: `invalid JSON - ${err.message}` }
+    // The published file is not valid JSON - most often a raw control
+    // character inside a string. Try the narrow sanitiser before giving up,
+    // and say so loudly if it worked, so a silent data change is impossible.
+    const repaired = sanitiseJsonText(text)
+    if (repaired !== text) {
+      try {
+        data = JSON.parse(repaired)
+        console.warn(
+          `  repaired ${language}/${spec.file(category)}: ` +
+          'removed raw control character(s) that JSON forbids. ' +
+          'Worth fixing upstream.'
+        )
+      } catch (err2) {
+        // Reported, never silently skipped: a corrupt upstream file is a real
+        // bug and must be fixed in the lyrics repo, not papered over here.
+        return { entries: [], url, problem: `invalid JSON - ${err.message}` }
+      }
+    } else {
+      return { entries: [], url, problem: `invalid JSON - ${err.message}` }
+    }
   }
 
   const arr = Array.isArray(data) ? data : Object.values(data).flat()
