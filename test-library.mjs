@@ -124,7 +124,8 @@ ok('empty branch sets no error', /if \(!id\) \{[^}]*error\.value = ''/s.test(rd)
 
 /* ---- 4. live catalog from GitHub main ---- */
 console.log('\n--- 4. live catalog (GitHub main) ---')
-const { fetchCatalog, fetchHymn, CATEGORY_META, normaliseCategory, getAudioUrl } =
+const { fetchCatalog, fetchHymn, CATEGORY_META, normaliseCategory, getAudioUrl,
+  hymnErrorMessage, isHymnMissing } =
   await import('./src/js/hymnService.js')
 
 eq('CATEGORY_META has 3 books', CATEGORY_META.length, 3)
@@ -896,6 +897,79 @@ ok('a blocked autoplay does not leave a false playing state',
   /\.catch\(\(err\)[\s\S]{0,120}isPlaying\.value = false/.test(rnd))
 ok('the rotating animation respects reduced motion',
   /prefers-reduced-motion[\s\S]{0,200}random-spin\.spining \{ animation: none/.test(rnd))
+
+// Verify the exact scenario from the directive: hymn 506 for english/hymns.
+// The thrown Error keeps its diagnostic message (tests + console rely on it),
+// while the mapper produces the sentence a visitor actually reads.
+const notFound = await fetchHymn('hymns', '506', 'english').catch((e) => e)
+console.log('\n--- hymn "506" / english / hymns ---')
+console.log('  code          :', notFound.code)
+console.log('  diagnostic msg:', notFound.message)
+console.log('  visitor msg   :', hymnErrorMessage(notFound))
+console.log('  isMissing     :', isHymnMissing(notFound))
+
+ok('the missing hymn reports HYMN_NOT_FOUND', notFound.code === 'HYMN_NOT_FOUND')
+ok('the diagnostic message is still available for developers',
+  /could not be loaded for english\/hymns/.test(notFound.message) &&
+  notFound.attempts.length > 0)
+ok('the visitor message is short and plain', hymnErrorMessage(notFound).length < 90)
+ok('the visitor message never leaks a URL', !/https?:/.test(hymnErrorMessage(notFound)))
+ok('the visitor message never leaks the diagnostic',
+  !hymnErrorMessage(notFound).includes('Tried:'))
+ok('the visitor message says "not found"', /not found in this category/i.test(hymnErrorMessage(notFound)))
+ok('the visitor message offers a way forward',
+  /try another number|pick one from the list/i.test(hymnErrorMessage(notFound)))
+ok('the visitor message never blames the visitor',
+  !/invalid|incorrect|wrong|error/i.test(hymnErrorMessage(notFound)))
+
+// Every branch must be safe, and none may leak internals. "could not be loaded"
+// is legitimate copy for the generic fallback - what must never appear is the
+// diagnostic "Tried: <url>" tail or a raw URL.
+for (const code of ['HYMN_NOT_FOUND', 'HYMN_DATA_INVALID', 'HYMN_DATA_MISSING',
+  'HYMN_ID_REQUIRED', 'SOMETHING_ELSE']) {
+  const msg = hymnErrorMessage({ code, message: 'Hymn "9" could not be loaded. Tried: https://x' })
+  ok(`${code} -> a clean sentence`,
+    Boolean(msg) && !/https?:/.test(msg) && !/Tried:/.test(msg) && msg.length < 120, msg)
+}
+ok('an error with no code still gets a safe message',
+  !/https?:/.test(hymnErrorMessage(new Error('GET https://raw.example/x failed'))) &&
+  Boolean(hymnErrorMessage(new Error('boom'))))
+ok('isHymnMissing only matches HYMN_NOT_FOUND',
+  isHymnMissing({ code: 'HYMN_NOT_FOUND' }) &&
+  !isHymnMissing({ code: 'HYMN_DATA_MISSING' }) &&
+  !isHymnMissing(null))
+
+console.log('\n--- 25. missing-hymn snackbar + recovery ---')
+// The regression: `error.value = err.message` put a diagnostic string - naming
+// every URL that was tried - straight into a red block on the page.
+ok('the raw error message is never assigned to the UI',
+  !/error\.value = err\.message/.test(rd))
+ok('the UI uses the visitor-facing mapper', /error\.value = hymnErrorMessage\(err\)/.test(rd))
+ok('a missing hymn raises the snackbar', /showToast\(`Hymn \$\{id\} was not found/.test(rd))
+ok('...and the notice names the category it was not found in',
+  /was not found in \$\{categoryLabel\.value\}/.test(rd))
+ok('a missing hymn does not also set a red error line',
+  /hymnMissing\.value = isHymnMissing\(err\)[\s\S]{0,220}error\.value = ''/.test(rd))
+// The diagnostic stays available to developers, but at warn level: the visitor
+// did nothing wrong, and this must not read as an unhandled failure.
+ok('the diagnostic still reaches the console, at warn level',
+  /console\.warn\(`list: hymn/.test(rd))
+ok('the catch swallows the rejection', /catch \(err\) \{[\s\S]{0,600}?finally \{/.test(rd))
+
+ok('a recovery panel is rendered when no hymn is shown',
+  /v-else-if="!hymn && hasId" class="reader-recover/.test(rd))
+ok('the panel offers a way back to the library',
+  /to="\/library" class="recover-btn"/.test(rd))
+ok('...and a way to change the number',
+  /to="\/list" class="recover-btn recover-btn-ghost"/.test(rd))
+ok('the panel title distinguishes not-found from other failures',
+  /hymnMissing\.value \? 'Hymn not found in this category'/.test(rd))
+ok('a successful load clears the failure state',
+  /hymn\.value = result[\s\S]{0,220}hymnMissing\.value = false/.test(rd))
+ok('the recovery panel is neutral, not red',
+  /\.recover-title \{[\s\S]{0,220}?color: var\(--text-primary\)/.test(
+    read('./src/pages/List.vue')) &&
+  !/\.reader-recover[\s\S]{0,200}color: #ef4444/.test(read('./src/pages/List.vue')))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

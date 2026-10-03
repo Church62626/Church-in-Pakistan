@@ -304,6 +304,30 @@
       </section>
 
       <p v-if="loading" class="reader-status">Loading hymn...</p>
+
+      <!-- Recovery panel. Reached when a hymn cannot be shown, either because the
+           number is not in this category or the file could not be read. The
+           reader stays usable: the finder above still works, and both links go
+           somewhere sensible. -->
+      <section v-else-if="!hymn && hasId" class="reader-recover glass-card">
+        <span class="recover-icon" aria-hidden="true">🔍</span>
+        <h2 class="recover-title">{{ recoverTitle }}</h2>
+        <p class="recover-text">
+          {{ error || 'That hymn could not be opened right now.' }}
+        </p>
+        <p class="recover-hint">
+          Use the keypad above to try another number, or browse the full list.
+        </p>
+        <div class="recover-actions">
+          <router-link to="/library" class="recover-btn">
+            <span aria-hidden="true">📚</span> Browse the Library
+          </router-link>
+          <router-link to="/list" class="recover-btn recover-btn-ghost">
+            <span aria-hidden="true">🎵</span> Change number
+          </router-link>
+        </div>
+      </section>
+
       <p v-else-if="error" class="reader-status reader-status-error">{{ error }}</p>
 
       <main
@@ -346,6 +370,8 @@ import {
   CATEGORY_META,
   fetchCatalog,
   getActiveLanguage,
+  hymnErrorMessage,
+  isHymnMissing,
   onLanguageChange as subscribeLanguage
 } from '../js/hymnService'
 
@@ -395,6 +421,16 @@ const languageLabel = computed(() => (langMeta.value && langMeta.value.label) ||
 /** Readable category name for the header badge. */
 const categoryLabel = computed(() => CATEGORY_META.find((c) => c.key === category.value)?.label || category.value)
 const isSample = computed(() => Boolean(hymn.value && hymn.value.source === 'local'))
+
+/** Heading for the recovery panel. Deliberately neutral: "not found" is a
+ *  normal outcome of typing a number that is not in this category, not a
+ *  failure the visitor should feel bad about. */
+const recoverTitle = computed(() =>
+  hymnMissing.value ? 'Hymn not found in this category' : 'This hymn could not be opened'
+)
+
+/** Tracked separately from `error` so the panel can distinguish the two. */
+const hymnMissing = ref(false)
 
 /** True only when the route actually carries a hymn id (e.g. /list?id=12). */
 const hasId = computed(() => Boolean(requestedId.value.trim()))
@@ -608,10 +644,27 @@ async function loadHymn() {
     const result = await fetchHymn(category.value, id, language.value)
     if (token !== loadToken) return
     hymn.value = result
+    // A successful load clears the previous failure state, so navigating from a
+    // missing hymn to a good one does not leave the recovery panel behind.
+    hymnMissing.value = false
   } catch (err) {
     if (token !== loadToken) return
     hymn.value = null
-    error.value = err.message
+    // The visitor sees the short sentence, never the diagnostic - which names
+    // every URL that was tried. The detail still reaches the console so it
+    // stays debuggable, but it is warn-level because the visitor did nothing
+    // wrong, and it is swallowed here so no unhandled rejection escapes.
+    console.warn(`list: hymn "${id}" (${language.value}/${category.value}) failed -`, err.message)
+    // A missing number is a normal outcome, not a red alert: raise the same
+    // friendly snackbar used for the Chinese-edition notice.
+    hymnMissing.value = isHymnMissing(err)
+    if (hymnMissing.value) {
+      showToast(`Hymn ${id} was not found in ${categoryLabel.value}.`)
+      // The recovery panel carries the message; a second red line would repeat it.
+      error.value = ''
+    } else {
+      error.value = hymnErrorMessage(err)
+    }
   } finally {
     if (token === loadToken) loading.value = false
   }
@@ -1762,6 +1815,65 @@ onBeforeUnmount(() => {
 .reader-status-error {
   color: #ef4444;
   word-break: break-word;
+}
+
+/* ---- recovery panel (hymn not found / unreadable) ------------------ */
+.reader-recover {
+  padding: 30px 24px;
+  text-align: center;
+  border-radius: 20px;
+}
+
+.recover-icon { font-size: 40px; line-height: 1; margin-bottom: 10px; }
+
+.recover-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  /* Neutral, not alarming: a number that is not in this category is an ordinary
+     outcome, so this deliberately avoids the red error treatment. */
+  color: var(--text-primary);
+}
+
+.recover-text {
+  margin: 0 auto 6px;
+  max-width: 46ch;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.recover-hint {
+  margin: 0 0 18px;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.recover-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.recover-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
 
 /* ---- hymn finder: keypad + search --------------------------------- */

@@ -561,6 +561,53 @@ export async function fetchHymn(category, id, language) {
 
 export const FALLBACK_DATA_URL = null
 
+/* ---------------------------------------------------------------------- *
+ * Visitor-facing error copy
+ *
+ * `fetchHymn` throws an Error whose message is a *diagnostic*: it names the
+ * category, language and every URL that was tried. That is right for a console
+ * and wrong for a screen - a visitor who typed a number that does not exist has
+ * not done anything wrong, and "Tried: https://... | https://..." is noise at
+ * best and alarming at worst.
+ *
+ * The thrown Error is therefore split in two: `message` stays the diagnostic
+ * (tests and the console rely on it) and this mapper produces the sentence a
+ * visitor actually reads. Nothing here interpolates a URL or a file name.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * A short, honest sentence for a failed hymn load, or '' when the error is not
+ * a recognised hymn-load failure.
+ *
+ * Every branch avoids blame: the visitor is told what happened and what to do,
+ * never that they made a mistake.
+ */
+export function hymnErrorMessage(err) {
+  const code = err?.code || ''
+  switch (code) {
+    case 'HYMN_NOT_FOUND':
+      // The most common case: the file loaded fine, the number is just not in it.
+      return 'Hymn not found in this category. Try another number, or pick one from the list.'
+    case 'HYMN_DATA_INVALID':
+      // Upstream file is corrupt - our problem to fix, not the visitor's.
+      return 'This hymn could not be read because its text file has a problem. Please try another hymn.'
+    case 'HYMN_DATA_MISSING':
+      return 'The hymns for this language are not available right now. Please try another language.'
+    case 'HYMN_ID_REQUIRED':
+      return 'No hymn number was given. Please enter a hymn number.'
+    default:
+      // Unrecognised failure (network, timeout, offline). Never leak the message:
+      // it can contain a URL or an internal code.
+      return 'This hymn could not be loaded. Please check your connection and try again.'
+  }
+}
+
+/** True when the failure is "that number is not in this category" rather than
+ *  an outage, so the UI can offer navigation instead of a retry prompt. */
+export function isHymnMissing(err) {
+  return err?.code === 'HYMN_NOT_FOUND'
+}
+
 /* ------------------------------------------------------------------ *
  * Library catalog
  *
