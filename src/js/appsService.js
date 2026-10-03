@@ -121,28 +121,28 @@ export function formatSize(bytes) {
 
 /* ======================================================================
    Bible quiz
-   The questions live in `bible-quiz/` in the main repo and are read at
-   runtime, so publishing questions needs no redeploy.
 
-   Schema:
-     { questions: [ {
-         id, testament: 'Old Testament' | 'New Testament',
-         language: 'english' | 'urdu' | 'chinese',
-         question, options: [4 strings],
-         correctAnswerIndex: 0..3,
-         explanation
-     } ] }
+   Source (verified live, 186 real questions):
+     https://raw.githubusercontent.com/Church62626/Church-in-Pakistan/
+       9bab97bed02f03f2a6130a1eaa7d55f9957b842a/bible-quiz/bible-quiz.json
 
-   IMPORTANT: `bible-quiz/bible-quiz.json` is currently EMPTY (1 byte) on both
-   the pinned commit and main. The screen therefore renders an honest "no
-   questions published yet" state. It deliberately does NOT ship invented
-   questions - fabricating scripture, and especially an answer key someone is
-   then taught from, is not something to do silently.
+   ACTUAL schema (checked, not assumed):
+     {
+       oldTestament: { languages: { english: [...], urdu: [...], chinese: [...] } },
+       newTestament: { languages: { english: [...], urdu: [...], chinese: [...] } }
+     }
+
+   Each question: { id, question, options[4], correctAnswerIndex, explanation }
+
+   One real quirk: every language array begins with a PLACEHOLDER STRING such
+   as "@@OT_EN@@" - a build marker, not a question. It has no `question` field
+   and no `options`, so `normaliseQuestion` rejects it. It must not be treated
+   as data or the UI would render a blank, unanswerable card.
    ====================================================================== */
 
 export const QUIZ_REPO = 'Church62626/Church-in-Pakistan'
-export const QUIZ_PATH = 'bible-quiz'
-export const QUIZ_REF = '1927c8e95dcadb6161acc990aaa8250005e694cd'
+export const QUIZ_PATH = 'bible-quiz/bible-quiz.json'
+export const QUIZ_REF = '9bab97bed02f03f2a6130a1eaa7d55f9957b842a'
 
 /** The two sections the quiz is split into. */
 export const TESTAMENTS = ['Old Testament', 'New Testament']
@@ -150,8 +150,11 @@ export const TESTAMENTS = ['Old Testament', 'New Testament']
 /** Languages the quiz is authored in. */
 export const QUIZ_LANGUAGES = ['english', 'urdu', 'chinese']
 
-const QUIZ_API =
-  `https://api.github.com/repos/${QUIZ_REPO}/contents/${QUIZ_PATH}?ref=${QUIZ_REF}`
+/** The JSON keys that hold each testament's questions. */
+const TESTAMENT_KEYS = { 'Old Testament': 'oldTestament', 'New Testament': 'newTestament' }
+
+const QUIZ_URL =
+  `https://raw.githubusercontent.com/${QUIZ_REPO}/${QUIZ_REF}/${QUIZ_PATH}`
 
 /**
  * Validate and normalise one question.
@@ -189,53 +192,44 @@ export function normaliseQuestion(raw, index = 0) {
 }
 
 /**
- * Load the quiz questions.
+ * Load the quiz questions from the nested
+ * `{ oldTestament: { languages: {...} }, newTestament: { languages: {...} } }`
+ * structure, flattening it into one list where each question carries its own
+ * testament and language.
  *
- * Resolves to `{ questions, problem }` and never throws: an empty or missing
+ * Resolves to `{ questions, problem }` and never throws: a missing or empty
  * data file is a normal state for the screen to explain, not an exception.
- * `problem` is one of 'unavailable' | 'not-found' | 'empty' | 'unknown'.
+ * `problem` is one of 'unavailable' | 'empty' | 'unknown'.
  */
 export async function fetchQuizQuestions() {
-  let entries
+  let parsed
   try {
-    const res = await fetch(QUIZ_API, { headers: { Accept: 'application/vnd.github+json' } })
+    const res = await fetch(QUIZ_URL)
     if (res.status === 404) return { questions: [], problem: 'not-found' }
     if (!res.ok) return { questions: [], problem: 'unavailable' }
-    entries = await res.json()
+    const text = (await res.text()).trim()
+    if (!text) return { questions: [], problem: 'empty' }
+    parsed = JSON.parse(text)
   } catch {
     return { questions: [], problem: 'unavailable' }
   }
-  if (!Array.isArray(entries)) return { questions: [], problem: 'unknown' }
+  if (!parsed || typeof parsed !== 'object') return { questions: [], problem: 'unknown' }
 
-  const files = entries
-    .filter((e) => e && e.type === 'file' && /\.json$/i.test(e.name || ''))
-    .map((e) => ({ url: e.download_url || '', name: e.name }))
-
-  if (!files.length) return { questions: [], problem: 'not-found' }
-
-  const loaded = await Promise.all(
-    files.map(async (f) => {
-      if (!f.url) return []
-      try {
-        const res = await fetch(f.url)
-        // An empty file returns 200 with an empty body. That is "nothing here",
-        // not a parse failure, so the message stays accurate.
-        const text = (await res.text()).trim()
-        if (!text) return []
-        const parsed = JSON.parse(text)
-        if (Array.isArray(parsed)) return parsed
-        return Array.isArray(parsed?.questions) ? parsed.questions : []
-      } catch {
-        // One unreadable file must not blank the rest of the quiz.
-        return []
+  const questions = []
+  for (const [testament, key] of Object.entries(TESTAMENT_KEYS)) {
+    const langs = parsed?.[key]?.languages
+    if (!langs || typeof langs !== 'object') continue
+    for (const language of QUIZ_LANGUAGES) {
+      const list = Array.isArray(langs[language]) ? langs[language] : []
+      for (const raw of list) {
+        // normaliseQuestion rejects the "@@OT_EN@@" placeholder strings and any
+        // entry with no options or an out-of-range answer, so a build marker
+        // can never become an unanswerable card in the UI.
+        const q = normaliseQuestion(raw, questions.length)
+        if (q) questions.push({ ...q, testament, language })
       }
-    })
-  )
-
-  const questions = loaded
-    .flat()
-    .map((raw, i) => normaliseQuestion(raw, i))
-    .filter(Boolean)
+    }
+  }
 
   if (!questions.length) return { questions: [], problem: 'empty' }
   return { questions, problem: '' }
@@ -249,12 +243,12 @@ export function questionsFor(questions, testament) {
 /** Honest, blame-free copy for each empty / failed state. */
 export const QUIZ_EMPTY_COPY = {
   empty: {
-    title: 'No questions published yet',
-    text: 'The quiz data file exists but is still empty. Questions will appear here automatically as soon as they are added.'
+    title: 'No questions available',
+    text: 'There are no questions for this section and language yet. Try another combination - the other testament or another language may have them.'
   },
   'not-found': {
     title: 'Quiz questions are not published yet',
-    text: 'There is no quiz data file in the repository yet. Once one is added, every question in it will show up here.'
+    text: 'The quiz data file could not be found. Once it is published, every question in it will appear here automatically.'
   },
   unavailable: {
     title: 'Could not load the quiz',
@@ -318,6 +312,120 @@ export async function fetchEBooks(folder = 'urdu') {
   if (!books.length) return { books: [], problem: 'empty' }
   return { books, problem: '' }
 }
+
+/* ======================================================================
+   Reading bookmarks
+
+   A bookmark is `{ bookId, file, title, savedAt, page? }` where `page` is
+   optional and only present when the viewer can report one.
+
+   IMPORTANT LIMIT: the browser's native PDF viewer (used by <object>) does not
+   expose the current page to JavaScript, so automatic page-position saving is
+   not possible without bundling a full PDF engine (pdf.js). The bookmark
+   therefore records the book and the time, which is honest and still useful,
+   rather than a page number that would always be wrong.
+
+   Storage: Firestore per user when signed in; localStorage otherwise, so a
+   visitor who is not logged in keeps their bookmarks on the device instead of
+   silently losing them.
+   ====================================================================== */
+
+import { auth, db } from './firebase-config.js'
+import { doc, setDoc, getDoc } from 'firebase/firestore/lite'
+
+const BOOKMARKS_COLLECTION = 'bookmarks'
+const LOCAL_KEY = 'cip.ebookBookmarks'
+
+/** The signed-in user's email, or '' when signed out. */
+export function currentUserEmail() {
+  return auth?.currentUser?.email || ''
+}
+
+/** Read the anonymous, device-local bookmarks. Never throws. */
+export function localBookmarks() {
+  try {
+    const raw = globalThis.localStorage?.getItem(LOCAL_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeLocalBookmarks(list) {
+  try {
+    globalThis.localStorage?.setItem(LOCAL_KEY, JSON.stringify(list))
+  } catch {
+    // Private mode / storage disabled: the bookmark simply will not persist.
+  }
+}
+
+/** Bookmark one book. Returns `{ ok, reason }`. */
+export async function saveBookmark(book) {
+  if (!book || !book.id) return { ok: false, reason: 'no-book' }
+
+  const entry = {
+    bookId: book.id,
+    file: book.file || '',
+    title: book.title || '',
+    savedAt: Date.now()
+  }
+
+  const email = currentUserEmail()
+  if (!email) {
+    // Not signed in: keep it on the device rather than dropping it.
+    const next = [entry, ...localBookmarks().filter((b) => b.bookId !== book.id)]
+    writeLocalBookmarks(next)
+    return { ok: true, reason: 'local' }
+  }
+
+  try {
+    // Keyed by email + book id, so re-saving updates one document instead of
+    // piling up duplicates.
+    await setDoc(
+      doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${book.id}`),
+      { ...entry, owner: email },
+      { merge: true }
+    )
+    return { ok: true, reason: 'cloud' }
+  } catch (err) {
+    // A Firestore failure (offline, rules, quota) must not lose the bookmark,
+    // so it falls back to the device copy.
+    console.warn('ebooks: cloud bookmark failed, keeping a local copy:', err.message)
+    const next = [entry, ...localBookmarks().filter((b) => b.bookId !== book.id)]
+    writeLocalBookmarks(next)
+    return { ok: true, reason: 'local' }
+  }
+}
+
+/** Read a single bookmark for a book, or null. */
+export async function readBookmark(bookId) {
+  const local = localBookmarks().find((b) => b.bookId === bookId)
+  const email = currentUserEmail()
+  if (!email) return local || null
+  try {
+    const snap = await getDoc(doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${bookId}`))
+    const data = snap.exists() ? snap.data() : null
+    if (!data) return local || null
+    return { ...data, bookId }
+  } catch {
+    return local || null
+  }
+}
+
+/** Remove a bookmark from whichever stores hold it. */
+export async function removeBookmark(bookId) {
+  writeLocalBookmarks(localBookmarks().filter((b) => b.bookId !== bookId))
+  const email = currentUserEmail()
+  if (!email) return
+  try {
+    const { deleteDoc } = await import('firebase/firestore/lite')
+    await deleteDoc(doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${bookId}`))
+  } catch (err) {
+    console.warn('ebooks: could not remove cloud bookmark:', err.message)
+  }
+}
+
 
 /* ======================================================================
    LS Audio (Life-Study broadcasts)

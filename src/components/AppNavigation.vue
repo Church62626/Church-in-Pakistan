@@ -17,6 +17,47 @@
           {{ item.title }}
         </router-link>
 
+        <!-- Library: a dropdown holding every reading surface, so List and
+             Listen no longer need their own top-level buttons. -->
+        <div
+          class="nav-products"
+          @mouseenter="openLibrary"
+          @mouseleave="closeLibrary"
+          @focusin="openLibrary"
+        >
+          <button
+            type="button"
+            class="nav-link products-trigger"
+            :class="{ active: libraryOpen }"
+            :aria-expanded="libraryOpen"
+            aria-haspopup="true"
+            @click="libraryOpen ? closeLibraryNow() : openLibrary()"
+          >
+            <span class="nav-icon" aria-hidden="true">📚</span>
+            Library
+            <span class="products-caret" aria-hidden="true">▾</span>
+          </button>
+
+          <transition name="products-drop">
+            <div v-if="libraryOpen" class="products-menu products-menu-wide" role="menu">
+              <router-link
+                v-for="item in libraryItems"
+                :key="item.title"
+                :to="item.to"
+                class="products-item"
+                role="menuitem"
+                @click="closeLibraryNow"
+              >
+                <span class="products-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="products-body">
+                  <span class="products-title">{{ item.title }}</span>
+                  <span class="products-text">{{ item.text }}</span>
+                </span>
+              </router-link>
+            </div>
+          </transition>
+        </div>
+
         <!-- Products: a hover/click dropdown, not a plain link, because the
              apps live on GitHub and the folder is the real source of truth. -->
         <div
@@ -120,6 +161,17 @@
           @click="mobileMenuOpen = false"
         >
           <span class="mobile-icon">{{ item.icon }}</span>
+          {{ item.title }}
+        </router-link>
+        <router-link
+          v-for="item in libraryItems"
+          :key="`m-${item.title}`"
+          :to="item.to"
+          class="mobile-link"
+          active-class="active"
+          @click="mobileMenuOpen = false"
+        >
+          <span class="mobile-icon" aria-hidden="true">{{ item.icon }}</span>
           {{ item.title }}
         </router-link>
         <router-link
@@ -270,14 +322,54 @@ const user = ref(null)
 
 const navItems = [
   { title: 'Home', to: '/', icon: '🏠' },
-  { title: 'List', to: '/list', icon: '🎵' },
-  { title: 'Listen', to: '/listen', icon: '🎧' },
-
-  { title: 'Library', to: '/library', icon: '📚' },
+  // List and Listen intentionally live under the Library dropdown rather than
+  // as top-level buttons: they are two views of the same collection, and the
+  // bar was becoming unreadable with every section listed separately.
   { title: 'Store', to: '/store', icon: '🛍️' },
   { title: 'Events', to: '/events', icon: '📅' },
   { title: 'About', to: '/about', icon: 'ℹ️' }
 ]
+
+/** Library sub-sections shown in the Library dropdown. */
+const libraryItems = [
+  { title: 'Library', to: '/library', icon: '📚', text: 'Browse all books' },
+  { title: 'List', to: '/list', icon: '🎵', text: 'Read the lyrics' },
+  { title: 'Listen', to: '/listen', icon: '🎧', text: 'Play the recordings' },
+  { title: 'E-Books', to: '/ebooks', icon: '📚', text: 'Read books online' },
+  { title: 'LS Audio', to: '/ls-audio', icon: '🎙️', text: 'Life-Study messages' },
+  { title: 'Bible Quiz', to: '/quiz', icon: '📝', text: 'Test your knowledge' }
+]
+
+/* ---- Library dropdown ------------------------------------------------
+   Mirrors the Products dropdown: opens on hover, focus and click, with a
+   short close delay so the pointer can travel down into the menu without it
+   disappearing mid-move. */
+const libraryOpen = ref(false)
+let libraryCloseTimer = null
+
+function openLibrary() {
+  if (libraryCloseTimer) {
+    clearTimeout(libraryCloseTimer)
+    libraryCloseTimer = null
+  }
+  libraryOpen.value = true
+}
+
+function closeLibrary() {
+  if (libraryCloseTimer) clearTimeout(libraryCloseTimer)
+  libraryCloseTimer = setTimeout(() => {
+    libraryOpen.value = false
+    libraryCloseTimer = null
+  }, 180)
+}
+
+function closeLibraryNow() {
+  if (libraryCloseTimer) {
+    clearTimeout(libraryCloseTimer)
+    libraryCloseTimer = null
+  }
+  libraryOpen.value = false
+}
 
 /** Keep the whole app on one language, and reflect it in the URL when the
  *  current route cares about the language (Library / Reader / List). */
@@ -331,9 +423,11 @@ async function logout() {
 
 let unsubscribeAuth = null
 
-/** Escape closes the Products menu immediately, skipping the hover delay. */
+/** Escape closes the Library menu immediately, skipping the hover delay. */
 function onKeydown(e) {
-  if (e.key === 'Escape' && productsOpen.value) closeProductsNow()
+  if (e.key !== 'Escape') return
+  if (libraryOpen.value) closeLibraryNow()
+  if (productsOpen.value) closeProductsNow()
 }
 
 onMounted(() => {
@@ -349,6 +443,10 @@ onUnmounted(() => {
   if (productsCloseTimer) {
     clearTimeout(productsCloseTimer)
     productsCloseTimer = null
+  }
+  if (libraryCloseTimer) {
+    clearTimeout(libraryCloseTimer)
+    libraryCloseTimer = null
   }
   if (unsubscribeAuth) {
     unsubscribeAuth()
@@ -392,6 +490,10 @@ onUnmounted(() => {
   box-shadow: var(--shadow-lg);
   z-index: 60;
 }
+
+/* The Library menu holds six entries, so it is wider than the Products one
+   to keep each label on one line. */
+.products-menu-wide { min-width: 260px; }
 
 .products-item {
   display: flex;
