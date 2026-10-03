@@ -16,6 +16,20 @@
       </section>
 
       <section v-else class="player glass-card" aria-label="Audio player">
+        <!-- Identity row: which hymn this actually is. The title alone is not
+             enough to find it in a hymnal, so the number, id and category are
+             all shown on the card face. -->
+        <div class="player-ident">
+          <span class="player-number" aria-label="Hymn number">
+            <span class="player-ident-label">No.</span>
+            {{ current.no ?? current.id }}
+          </span>
+          <span class="player-ident-label">ID</span>
+          <span class="player-ident-id">{{ current.id }}</span>
+          <span class="player-ident-label">Category</span>
+          <span class="player-ident-cat">{{ currentCategoryLabel }}</span>
+        </div>
+
         <div class="player-track">
           <p class="player-title" :class="scriptClass(language)">
             {{ current.title }}
@@ -135,8 +149,20 @@ import {
   getLanguage,
   getActiveLanguage,
   onLanguageChange as subscribeLanguage,
-  scriptClass
+  scriptClass,
+  CATEGORY_META,
+  normaliseCategory
 } from '../js/hymnService'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+/** Category for a deep-linked track; the track's own value wins when set. */
+const currentCategory = computed(() => {
+  const raw = route.query.category || route.query.cat || 'hymns'
+  const one = Array.isArray(raw) ? raw[0] : raw
+  return normaliseCategory(one)
+})
 
 const language = ref(getActiveLanguage())
 const langMeta = computed(() => getLanguage(language.value))
@@ -162,9 +188,21 @@ const speedLabel = computed(() => {
   return `${parseFloat(n.toFixed(2))}&times;`
 })
 
+/** The audio URL uses the track's own category, falling back to the active one
+ *  so a track loaded from a URL without one still resolves. */
 const audioSrc = computed(() =>
-  current.value ? getAudioUrl('hymns', current.value.id, 'mp3') : ''
+  current.value
+    ? getAudioUrl(current.value.category || currentCategory.value, current.value.id, 'mp3')
+    : ''
 )
+
+/** Category shown on the card, from the URL so a shared link matches. */
+const currentCategoryLabel = computed(() => {
+  const key = current.value?.category || currentCategory.value
+  return CATEGORY_META.find((c) => c.key === key)?.short ||
+    CATEGORY_META.find((c) => c.key === key)?.label ||
+    key
+})
 
 const timeLabel = computed(() =>
   duration.value
@@ -177,7 +215,11 @@ function formatTime(sec) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-/** Flatten the catalog into a playable list. */
+/** Flatten the catalog into a playable list.
+ *
+ *  Each track carries the category it came from. Without it the player had to
+ *  guess 'hymns' when building the audio URL, so a New Song or an Others entry
+ *  pointed at the wrong folder on disk and silently failed to play. */
 function flatten(catalog) {
   const out = []
   const seen = new Set()
@@ -186,7 +228,13 @@ function flatten(catalog) {
       const key = `${h.id}:${h.title}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ id: h.id, no: h.no ?? h.zh_no, title: h.title || h.id, subcat: h.subcat || '' })
+      out.push({
+        id: h.id,
+        no: h.no ?? h.zh_no,
+        title: h.title || h.id,
+        subcat: h.subcat || '',
+        category: book.key || 'hymns'
+      })
     }
   }
   return out
@@ -400,6 +448,49 @@ onUnmounted(() => {
   padding: 22px;
   border-radius: 18px;
 }
+
+/* ---- identity row on the player card ------------------------------- */
+.player-ident {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.player-ident-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.player-number {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(79, 124, 255, 0.16);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.player-ident-id,
+.player-ident-cat {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  /* Ids like "H273a" and category keys must never stretch the card. */
+  overflow-wrap: anywhere;
+}
+
+.player-ident-cat { font-weight: 500; }
 
 .player-track { text-align: center; margin-bottom: 14px; }
 

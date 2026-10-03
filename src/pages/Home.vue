@@ -30,6 +30,10 @@
       </div>
     </section>
 
+    <!-- Random hymn player: one hymn per active language, rotated through on
+         demand, so the multilingual range is visible from the home page. -->
+    <RandomHymnPlayer />
+
     <!-- Features Grid -->
     <section class="features-section">
       <div class="container">
@@ -53,6 +57,7 @@
 <script setup>
 import { ref } from 'vue'
 import HeroCarousel from '../components/HeroCarousel.vue'
+import RandomHymnPlayer from '../components/RandomHymnPlayer.vue'
 
 // Carousel highlights. Every card points at a page that exists and works.
 const slides = ref([

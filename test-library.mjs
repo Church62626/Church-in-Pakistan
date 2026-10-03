@@ -856,5 +856,46 @@ ok('the notice is a polite live region, not an alert',
 ok('the toast timer is cleared on unmount',
   /onBeforeUnmount[\s\S]{0,300}clearTimeout\(toastTimer\)/.test(rd))
 
+console.log('\n--- 24. Listen card identity + Home random player ---')
+ok('the player card shows the hymn number',
+  /player-number/.test(ls) && /\{\{ current\.no \?\? current\.id \}\}/.test(ls))
+ok('...the id', /player-ident-id">\{\{ current\.id \}\}/.test(ls))
+ok('...and the category', /player-ident-cat/.test(ls))
+ok('each track remembers its own category', /category: book\.key \|\| 'hymns'/.test(ls))
+// The audio URL used to hardcode 'hymns', so a New Song or Others entry pointed
+// at the wrong folder on the audio repo and silently failed to play.
+ok('the audio url uses the track category, not a hardcoded one',
+  /getAudioUrl\(current\.value\.category \|\| currentCategory\.value/.test(ls) &&
+  !/getAudioUrl\('hymns', current\.value\.id/.test(ls))
+ok('the play/pause icon is driven by real playback events',
+  /addEventListener\('play'/.test(ls) && /addEventListener\('pause'/.test(ls) &&
+  /isPlaying \? '⏸' : '▶'/.test(ls))
+ok('...and its accessible label matches the icon',
+  /:aria-label="isPlaying \? 'Pause' : 'Play'"/.test(ls))
+
+const rnd = read('./src/components/RandomHymnPlayer.vue')
+const homeTxt = read('./src/pages/Home.vue')
+ok('Home mounts the random player', /<RandomHymnPlayer \/>/.test(homeTxt) &&
+  /import RandomHymnPlayer/.test(homeTxt))
+ok('the card is a real button, so it is keyboard reachable',
+  /<button[\s\S]{0,200}class="random-card/.test(rnd))
+ok('it starts playback on click', /@click="playCurrent"/.test(rnd) &&
+  /function playCurrent\(\)/.test(rnd))
+// Languages round-robin: uniform random would surface Chinese almost never,
+// because Urdu and English dominate the catalog.
+ok('it rotates languages rather than picking uniformly at random',
+  /PUBLISHED_LANGUAGES/.test(rnd) && /\(rotation\.value \+ 1\) % keys\.length/.test(rnd))
+ok('a random hymn is chosen within the language',
+  /Math\.floor\(Math\.random\(\) \* picks\.length\)/.test(rnd))
+ok('shuffling stops the previous hymn',
+  /function shuffle\(\)[\s\S]{0,400}stop\(\)/.test(rnd))
+ok('playback is stopped on unmount', /onUnmounted\(stop\)/.test(rnd))
+ok('the audio element never gets an empty src',
+  /<audio ref="audioEl" preload="none">/.test(rnd) && !/:src=""/.test(rnd))
+ok('a blocked autoplay does not leave a false playing state',
+  /\.catch\(\(err\)[\s\S]{0,120}isPlaying\.value = false/.test(rnd))
+ok('the rotating animation respects reduced motion',
+  /prefers-reduced-motion[\s\S]{0,200}random-spin\.spining \{ animation: none/.test(rnd))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
