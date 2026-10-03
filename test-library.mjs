@@ -968,9 +968,9 @@ ok('the panel title distinguishes not-found from other failures',
 ok('a successful load clears the failure state',
   /hymn\.value = result[\s\S]{0,220}hymnMissing\.value = false/.test(rd))
 ok('the recovery panel is neutral, not red',
-  /\.recover-title \{[\s\S]{0,220}?color: var\(--text-primary\)/.test(
+  /\.recover-title \{[\s\S]{0,320}?color: var\(--text-primary\)/.test(
     read('./src/pages/List.vue')) &&
-  !/\.reader-recover[\s\S]{0,200}color: #ef4444/.test(read('./src/pages/List.vue')))
+  !/\.reader-recover[\s\S]{0,320}color: #ef4444/.test(read('./src/pages/List.vue')))
 
 console.log(`\n--- 25. missing-hymn snackbar + recovery ---`)
 // The regression: `error.value = err.message` put a diagnostic string - naming

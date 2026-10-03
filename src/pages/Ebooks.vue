@@ -87,6 +87,14 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { fetchEBooks, formatSize } from '../js/appsService.js'
+// Cloud bookmark layer. Kept in its own module so the Firestore imports do not
+// leak into appsService.js, which the test suite imports under bare Node.
+import {
+  saveBookmark,
+  readBookmark,
+  removeBookmark,
+  currentUserEmail
+} from '../js/bookmarkStore.js'
 
 const books = ref([])
 const loading = ref(true)

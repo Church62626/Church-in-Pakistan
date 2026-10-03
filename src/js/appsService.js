@@ -15,11 +15,11 @@ export const APPS_REPO = 'Church62626/Church-in-Pakistan'
 export const APPS_PATH = 'church-apps'
 
 /**
- * Pinned to the commit the Products menu link points at. Using a branch here
- * would let the catalogue change without a deploy; pinning keeps what a visitor
- * sees stable.
+ * Pinned to the commit that publishes the Hymns Android app, so the catalogue
+ * cannot change under a visitor mid-session. `APPS_REF` is the only thing to
+ * bump when a new build is published.
  */
-export const APPS_REF = '5ed70b2fb5a4514eba8fc8a5051ea5ab8795fdda'
+export const APPS_REF = 'fe0da0390ecf8ca1194b399d19bd5afd72459c8c'
 
 export const APPS_BROWSER_URL =
   `https://github.com/${APPS_REPO}/tree/${APPS_REF}/${APPS_PATH}`
@@ -328,18 +328,15 @@ export async function fetchEBooks(folder = 'urdu') {
    Storage: Firestore per user when signed in; localStorage otherwise, so a
    visitor who is not logged in keeps their bookmarks on the device instead of
    silently losing them.
-   ====================================================================== */
 
-import { auth, db } from './firebase-config.js'
-import { doc, setDoc, getDoc } from 'firebase/firestore/lite'
+   NOTE: the Firestore imports live in bookmarkStore.js, not here. Pulling
+   firebase/app into this module would make every test that imports the apps
+   catalogue fail under bare Node, because that package only resolves through
+   the bundler. Keeping them apart leaves this file dependency-free.
+   ====================================================================== */
 
 const BOOKMARKS_COLLECTION = 'bookmarks'
 const LOCAL_KEY = 'cip.ebookBookmarks'
-
-/** The signed-in user's email, or '' when signed out. */
-export function currentUserEmail() {
-  return auth?.currentUser?.email || ''
-}
 
 /** Read the anonymous, device-local bookmarks. Never throws. */
 export function localBookmarks() {
@@ -360,70 +357,36 @@ function writeLocalBookmarks(list) {
   }
 }
 
-/** Bookmark one book. Returns `{ ok, reason }`. */
-export async function saveBookmark(book) {
+/**
+ * Bookmark one book, without touching Firestore.
+ *
+ * Always writes to the device first, so a bookmark survives a network failure
+ * and can be pushed to the cloud later. `saveBookmark` in bookmarkStore.js
+ * layers the Firestore write on top of this.
+ *
+ * Returns `{ ok, reason }`.
+ */
+export function saveBookmarkLocal(book) {
   if (!book || !book.id) return { ok: false, reason: 'no-book' }
-
   const entry = {
     bookId: book.id,
     file: book.file || '',
     title: book.title || '',
     savedAt: Date.now()
   }
-
-  const email = currentUserEmail()
-  if (!email) {
-    // Not signed in: keep it on the device rather than dropping it.
-    const next = [entry, ...localBookmarks().filter((b) => b.bookId !== book.id)]
-    writeLocalBookmarks(next)
-    return { ok: true, reason: 'local' }
-  }
-
-  try {
-    // Keyed by email + book id, so re-saving updates one document instead of
-    // piling up duplicates.
-    await setDoc(
-      doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${book.id}`),
-      { ...entry, owner: email },
-      { merge: true }
-    )
-    return { ok: true, reason: 'cloud' }
-  } catch (err) {
-    // A Firestore failure (offline, rules, quota) must not lose the bookmark,
-    // so it falls back to the device copy.
-    console.warn('ebooks: cloud bookmark failed, keeping a local copy:', err.message)
-    const next = [entry, ...localBookmarks().filter((b) => b.bookId !== book.id)]
-    writeLocalBookmarks(next)
-    return { ok: true, reason: 'local' }
-  }
+  const next = [entry, ...localBookmarks().filter((b) => b.bookId !== book.id)]
+  writeLocalBookmarks(next)
+  return { ok: true, reason: 'local', entry }
 }
 
-/** Read a single bookmark for a book, or null. */
-export async function readBookmark(bookId) {
-  const local = localBookmarks().find((b) => b.bookId === bookId)
-  const email = currentUserEmail()
-  if (!email) return local || null
-  try {
-    const snap = await getDoc(doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${bookId}`))
-    const data = snap.exists() ? snap.data() : null
-    if (!data) return local || null
-    return { ...data, bookId }
-  } catch {
-    return local || null
-  }
+/** Read a single device-local bookmark, or null. */
+export function readBookmarkLocal(bookId) {
+  return localBookmarks().find((b) => b.bookId === bookId) || null
 }
 
-/** Remove a bookmark from whichever stores hold it. */
-export async function removeBookmark(bookId) {
+/** Remove a bookmark from the device store. */
+export function removeBookmarkLocal(bookId) {
   writeLocalBookmarks(localBookmarks().filter((b) => b.bookId !== bookId))
-  const email = currentUserEmail()
-  if (!email) return
-  try {
-    const { deleteDoc } = await import('firebase/firestore/lite')
-    await deleteDoc(doc(db, BOOKMARKS_COLLECTION, `${encodeURIComponent(email)}__${bookId}`))
-  } catch (err) {
-    console.warn('ebooks: could not remove cloud bookmark:', err.message)
-  }
 }
 
 
