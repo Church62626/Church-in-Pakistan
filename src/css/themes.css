@@ -27,6 +27,10 @@
   --bg-tertiary: #F1F3F5;
   --surface: rgba(255, 255, 255, 0.85);
   --surface-hover: rgba(255, 255, 255, 0.95);
+  /* Fully opaque. Used by anything that must MASK the page behind it - dropdown
+     menus and dialogs. `--surface` at 85% lets body text bleed through, which is
+     unreadable when a menu opens over a paragraph. */
+  --surface-solid: #ffffff;
   
   /* Text Colors */
   --text-primary: #1F2937;
@@ -60,6 +64,7 @@
   --bg-tertiary: #2A2A2A;
   --surface: rgba(30, 30, 30, 0.85);
   --surface-hover: rgba(40, 40, 40, 0.95);
+  --surface-solid: #1a1a1a;
   
   --text-primary: #E5E7EB;
   --text-secondary: #9CA3AF;

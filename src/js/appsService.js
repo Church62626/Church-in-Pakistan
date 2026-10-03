@@ -133,6 +133,135 @@ export function splitLatestAndHistory(episodes) {
   const history = ordered.slice(0, -1).reverse()
   return { latest, history }
 }
+
+/**
+ * Church content modules: Store, Events, About.
+ *
+ * Each is a hand-authored JSON read at runtime, so publishing an update needs
+ * no redeploy:
+ *   Store/store.json    { books:  [ { id, title, author, price, coverImage,
+ *                                     description, downloadUrl } ] }
+ *   Events/events.json  { events: [ { id, title, date, time, location,
+ *                                     googleMapUrl, coordinates:{lat,lng},
+ *                                     description, bannerImage } ] }
+ *   About/about-us.json { organizationName, tagline, mission, history,
+ *                         contact:{ email, phone, address } }
+ *
+ * Two verified quirks drive this design:
+ *
+ * 1. The image/PDF paths these files name do NOT exist yet (checked: all 404).
+ *    Linking them would give visitors broken images and dead downloads, so the
+ *    UI falls back to a placeholder instead of a broken icon.
+ *
+ * 2. `about-us.json` has NO leadership field, and deliberately so: the church
+ *    holds there are no formal positions and all believers are simply brothers
+ *    and sisters. No role rendering is added here - doing so would contradict
+ *    the content. Any stale `leadership` key is ignored, never displayed.
+ * ====================================================================== */
+
+export const CONTENT_REF = 'main'
+const CONTENT_RAW =
+  `https://raw.githubusercontent.com/Church62626/Church-in-Pakistan/${CONTENT_REF}/`
+
+const MODULES = {
+  store: 'Store/store.json',
+  events: 'Events/events.json',
+  about: 'About/about-us.json'
+}
+
+async function loadJson(path) {
+  try {
+    const res = await fetch(CONTENT_RAW + path)
+    if (!res.ok) return null
+    const text = (await res.text()).trim()
+    if (!text) return null
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A "Get directions" link for an event.
+ *
+ * `coordinates` is preferred because it is unambiguous; otherwise the
+ * author's `googleMapUrl` is used. Anything that is not a real maps link
+ * yields '' so the control is hidden rather than pointing somewhere wrong.
+ */
+export function directionsUrl(event) {
+  const lat = Number(event?.coordinates?.lat)
+  const lng = Number(event?.coordinates?.lng)
+  if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+  }
+  const raw = String(event?.googleMapUrl || '').trim()
+  return /^https:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i.test(raw)
+    ? raw
+    : ''
+}
+
+/** Store books. */
+export async function fetchStore() {
+  const data = await loadJson(MODULES.store)
+  const books = Array.isArray(data?.books) ? data.books : []
+  return {
+    books: books.map((b) => ({
+      id: String(b?.id ?? b?.title ?? ''),
+      title: String(b?.title || 'Untitled'),
+      author: String(b?.author || ''),
+      price: String(b?.price || ''),
+      description: String(b?.description || ''),
+      coverImage: b?.coverImage
+        ? CONTENT_RAW + String(b.coverImage).replace(/^\/+/, '')
+        : '',
+      downloadUrl: b?.downloadUrl
+        ? CONTENT_RAW + String(b.downloadUrl).replace(/^\/+/, '')
+        : ''
+    })),
+    ok: Boolean(data)
+  }
+}
+
+/** Church events, latest date first. */
+export async function fetchEvents() {
+  const data = await loadJson(MODULES.events)
+  const events = Array.isArray(data?.events) ? data.events : []
+  const out = events.map((e) => ({
+    id: String(e?.id ?? e?.title ?? ''),
+    title: String(e?.title || 'Untitled event'),
+    date: String(e?.date || ''),
+    time: String(e?.time || ''),
+    location: String(e?.location || ''),
+    description: String(e?.description || ''),
+    directionsUrl: directionsUrl(e),
+    bannerImage: e?.bannerImage
+      ? CONTENT_RAW + String(e.bannerImage).replace(/^\/+/, '')
+      : ''
+  }))
+  // Newest first. Undated entries sort last rather than jumping to the top.
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  return { events: out, ok: Boolean(data) }
+}
+
+/** About content. No leadership/roles are surfaced, by design. */
+export async function fetchAbout() {
+  const data = await loadJson(MODULES.about)
+  if (!data) return { about: null, ok: false }
+  return {
+    about: {
+      organizationName: String(data.organizationName || 'Church in Pakistan'),
+      tagline: String(data.tagline || ''),
+      mission: String(data.mission || ''),
+      history: String(data.history || ''),
+      contact: {
+        email: String(data.contact?.email || ''),
+        phone: String(data.contact?.phone || ''),
+        address: String(data.contact?.address || '')
+      }
+    },
+    ok: true
+  }
+}
 export function formatSize(bytes) {
   const n = Number(bytes) || 0
   if (!n) return ''

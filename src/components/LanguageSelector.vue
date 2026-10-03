@@ -187,7 +187,7 @@ onUnmounted(() => {
   padding: 6px;
   border-radius: 14px;
   /* Matches the glass surfaces used elsewhere (surface + border + shadow). */
-  background: var(--surface);
+  background: var(--surface-solid);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid var(--border-color);

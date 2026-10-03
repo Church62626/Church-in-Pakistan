@@ -49,34 +49,22 @@
           <div v-else class="app-icon" aria-hidden="true">{{ app.platform.icon }}</div>
 
           <div class="app-body">
-            <h2 class="app-name">
-              {{ app.name }}
-              <span v-if="app.version" class="app-version">v{{ app.version }}</span>
-            </h2>
+            <h2 class="app-name">{{ app.name }}</h2>
             <p class="app-meta">
-              <span class="app-platform">{{ app.platform.label }}</span>
-              <span v-if="app.fileSize" class="app-size">&middot; {{ app.fileSize }}</span>
+              <span class="app-size">{{ app.fileSize || app.platform.label }}</span>
             </p>
-            <p v-if="app.description" class="app-desc">{{ app.description }}</p>
-
-            <!-- A manifest entry can name a file that was never uploaded. That
-                 is a publishing gap, not the visitor's problem, so it is stated
-                 plainly and no dead download link is offered. -->
-            <p v-if="!app.downloadOk" class="app-pending">
-              Not published yet — this build is still being prepared.
-            </p>
+            <p v-if="app.version" class="app-version-line">Version {{ app.version }}</p>
           </div>
 
           <div class="app-actions">
-            <a
-              v-if="app.downloadOk"
-              class="app-download"
-              :href="app.downloadUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              :download="app.file"
-            >Download</a>
-            <span v-else class="app-unavailable">Unavailable</span>
+            <!-- Download is a <button>, not an <a>: the click is intercepted to
+                 check sign-in first, which an anchor cannot do. -->
+            <button
+              type="button"
+              class="app-download app-download-btn"
+              :disabled="!app.downloadOk"
+              @click="download(app)"
+            >Download</button>
 
             <button type="button" class="app-details" @click="detail = app">Details</button>
           </div>
@@ -139,6 +127,28 @@
         </div>
       </section>
 
+      <!-- Sign-in gate for downloads. An overlay (not a bar) because it must be
+           unmissable and must not let the page behind be read by accident. -->
+      <div
+        v-if="signInPrompt"
+        class="signin-overlay"
+        @click.self="signInPrompt = false"
+      >
+        <div class="signin-modal" role="dialog" aria-modal="true" aria-labelledby="signin-title">
+          <h2 id="signin-title" class="signin-title">Please log in to download applications</h2>
+          <p class="signin-text">
+            Logging in lets us keep track of which version you have and makes sure you
+            always get the latest one.
+          </p>
+          <div class="signin-actions">
+            <router-link to="/" class="btn btn-primary" @click="signInPrompt = false">
+              Go to Log in
+            </router-link>
+            <button type="button" class="btn" @click="signInPrompt = false">Not now</button>
+          </div>
+        </div>
+      </div>
+
       <footer class="apps-foot">
         <p class="apps-foot-text">
           Apps are hosted on GitHub. You can browse the folder yourself:
@@ -154,6 +164,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { fetchAppsRich, APPS_BROWSER_URL } from '../js/appsService.js'
+import { authMethods } from '../js/firebase-config.js'
 
 const apps = ref([])
 const loading = ref(true)
@@ -162,10 +173,36 @@ const problemTitle = ref('')
 const problemText = ref('')
 /** The app whose details panel is open, or null. */
 const detail = ref(null)
+/** True while the "log in to download" prompt is showing. */
+const signInPrompt = ref(false)
 
 /** Escape closes the details panel. */
 function onKeydown(e) {
-  if (e.key === 'Escape' && detail.value) detail.value = null
+  if (e.key !== 'Escape') return
+  if (detail.value) detail.value = null
+  if (signInPrompt.value) signInPrompt.value = false
+}
+
+/** Signed-in email, or '' when signed out. Kept in sync with Firebase auth. */
+const user = ref(null)
+authMethods.onAuthChange((u) => { user.value = u ? { email: u.email } : null })
+
+/**
+ * Download, gated on being signed in.
+ *
+ * The button is a <button> rather than an <a> precisely so the click can be
+ * intercepted: an anchor would start the download immediately and there would
+ * be no point at which the sign-in check could run. Signed out, the visitor is
+ * asked to log in instead of silently getting nothing.
+ */
+function download(app) {
+  if (!app || !app.downloadOk) return
+  if (!user.value) {
+    signInPrompt.value = true
+    return
+  }
+  // Only reached when signed in and the binary really exists.
+  window.open(app.downloadUrl, '_blank', 'noopener')
 }
 
 /** Honest copy per failure. None of these blame the visitor. */
@@ -359,7 +396,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   margin-top: 24px;
   padding: 26px;
   border-radius: 20px;
-  background: var(--surface);
+  background: var(--surface-solid);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
 }
@@ -421,6 +458,68 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .detail-desc { margin: 0 0 20px; font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
 
 .detail-desc-muted { color: var(--text-secondary); font-style: italic; }
+
+/* ---- sign-in gate ---------------------------------------------------- */
+/* Opaque rather than translucent: the dialog must fully mask the page behind
+   it, otherwise text underneath bleeds through and becomes unreadable. */
+.signin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.signin-modal {
+  width: min(100%, 440px);
+  padding: 26px;
+  border-radius: 18px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.signin-title {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.signin-text {
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.signin-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The download button is now a <button>, so it needs the anchor's look. */
+.app-download-btn {
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-download-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app-version-line {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
 
 .detail-actions { display: flex; gap: 10px; }
 
