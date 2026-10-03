@@ -16,8 +16,19 @@
      Regional Arabic-script languages (Pashto/Shahmukhi, Sindhi, Balochi) use
      Noto Naskh Arabic instead, which has the correct Persian/Arabic letterforms
      and diacritic placement. Gurmukhi gets its own stack for Punjabi. */
-  --font-urdu-body: 'Jameel Noori Nastaliq', 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', sans-serif;
-  --font-urdu-heading: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaliq', sans-serif;
+  /* ---- Preferred Nastaliq faces (self-hosted) ----
+     'Jameel Noori Nastaleeq' and 'Alvi Nastaliq' are free Urdu Nastaliq
+     faces, but they are NOT on Google Fonts - they cannot be linked like
+     Noto Nastaliq Urdu is, they must be served from our own origin.
+     The @font-face block in "Self-hosted Nastaliq" below loads them from
+     /fonts/ if those files are present.
+
+     Until those .woff2 files are added to public/fonts/, the browser silently
+     skips the missing faces and lands on Noto Nastaliq Urdu, which is always
+     loaded from Google Fonts. So Urdu renders correctly either way and there
+     is no broken text, no tofu, and no layout shift when they are dropped in. */
+  --font-urdu-body: 'Jameel Noori Nastaleeq', 'Jameel Noori Nastaliq', 'Alvi Nastaliq', 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', sans-serif;
+  --font-urdu-heading: 'Alvi Nastaliq', 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', sans-serif;
   --font-arabic-body: 'Noto Naskh Arabic', 'Noto Nastaliq Urdu', 'Segoe UI', sans-serif;
   --font-arabic-heading: 'Noto Naskh Arabic', 'Noto Nastaliq Urdu', sans-serif;
   --font-gurmukhi-body: 'Noto Sans Gurmukhi', 'Noto Serif Gurmukhi', 'Raavi', sans-serif;
@@ -30,6 +41,36 @@
   --font-size-sm: 14px;
   --font-size-lg: 18px;
   --font-size-xl: 20px;
+}
+
+/* ---- Self-hosted Nastaliq ----
+   Jameel Noori Nastaleeq and Alvi Nastaliq are not available from Google
+   Fonts, so they are self-hosted. To enable them, drop the .woff2 files into
+   public/fonts/ using exactly these filenames:
+
+     public/fonts/JameelNooriNastaleeq.woff2   (SIL Open Font License 1.1)
+     public/fonts/AlviNastaliq.woff2           (free for non-commercial use)
+
+   Both are declared with font-display: swap and a local() first source, so a
+   visitor who already has the font installed gets it instantly and everyone
+   else falls through to Noto Nastaliq Urdu. Requests for absent files 404
+   quietly and change nothing visually - the stack resolves one step later. */
+@font-face {
+  font-family: 'Jameel Noori Nastaleeq';
+  src: local('Jameel Noori Nastaleeq'), local('JameelNooriNastaleeq'),
+       url('/fonts/JameelNooriNastaleeq.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Alvi Nastaliq';
+  src: local('Alvi Nastaliq'), local('AlviNastaliq'),
+       url('/fonts/AlviNastaliq.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 /* Ensure Urdu text renders correctly */

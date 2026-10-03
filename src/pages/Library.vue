@@ -351,12 +351,15 @@
 // `watch` is required: the PDF book list re-queries whenever the language tab
 // changes. Omitting it from this import throws a ReferenceError during setup and
 // blanks the entire page.
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   LANGUAGES,
   getLanguage,
   fetchCatalog,
-  scriptClass
+  scriptClass,
+  getActiveLanguage,
+  onLanguageChange as subscribeLanguage
 } from '../js/hymnService'
 import { fetchBooks, booksEmptyMessage, formatBookDate } from '../js/bookService'
 import {
@@ -366,7 +369,10 @@ import {
 } from '../js/premiumService'
 import { db } from '../js/firebase-config'
 
-const language = ref('english')
+// The nav bar's LanguageSelector is the single source of truth. This page
+// follows the global store and also honours ?language=/?lang= so a shared
+// Library link opens in the right language.
+const language = ref(getActiveLanguage())
 const catalog = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -411,6 +417,27 @@ function toggleBook(key) {
 const pdfBooks = ref([])
 const pdfLoading = ref(true)
 const pdfProblem = ref(null)
+
+let unsubscribeLanguage = null
+
+onMounted(() => {
+  // A ?language=/?lang= in the URL wins on first load, so a shared Library
+  // link opens in the language it was shared in.
+  const route = useRoute()
+  const fromQuery = route.query.language || route.query.lang
+  if (getLanguage(fromQuery) && fromQuery !== language.value) {
+    language.value = fromQuery
+  } else {
+    // Otherwise follow the nav bar's global selector.
+    unsubscribeLanguage = subscribeLanguage((key) => {
+      if (key !== language.value) language.value = key
+    })
+  }
+})
+
+onUnmounted(() => {
+  if (unsubscribeLanguage) unsubscribeLanguage()
+})
 
 // Re-query whenever the tab changes. No cross-language fallback: a Punjabi tab
 // with no books shows the empty state rather than quietly listing Urdu ones.

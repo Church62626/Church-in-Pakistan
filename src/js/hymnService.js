@@ -22,6 +22,83 @@ export const AUDIO_BASE_URL =
 
 export const CATEGORIES = ['hymns', 'newsong', 'others']
 
+/* ======================================================================
+   Global language store
+   The nav bar's LanguageSelector is the single source of truth for the
+   app's language. Pages subscribe via activeLanguageRef / onLanguageChange
+   instead of each keeping a private copy, so changing the language in one
+   place updates the Library, the Reader and the media categories at once.
+   ====================================================================== */
+
+const ACTIVE_LANGUAGE_KEY = 'cip.activeLanguage'
+
+/** Plain holder so non-component code (scripts, tests) can read it. */
+let activeLanguage = 'urdu'
+const languageListeners = new Set()
+
+function readStoredLanguage() {
+  try {
+    return globalThis.localStorage?.getItem(ACTIVE_LANGUAGE_KEY) || ''
+  } catch {
+    // Private mode / disabled storage: fall through to the default.
+    return ''
+  }
+}
+
+/** Stored value, else ?lang=/?language= from the URL, else the fallback. */
+export function resolveInitialLanguage(fallback = 'urdu') {
+  const stored = typeof window !== 'undefined' ? readStoredLanguage() : ''
+  if (getLanguage(stored)) return stored
+  if (typeof window !== 'undefined') {
+    try {
+      const q = new URLSearchParams(window.location.search)
+      const fromUrl = q.get('lang') || q.get('language')
+      if (getLanguage(fromUrl)) return fromUrl
+    } catch {
+      // Malformed URL: ignore.
+    }
+  }
+  // The fallback is validated too, so an unknown key can never become the
+  // active language. This matters outside the browser (tests, scripts).
+  return getLanguage(fallback) ? fallback : 'urdu'
+}
+
+/** The current global language key. */
+export function getActiveLanguage() {
+  return activeLanguage
+}
+
+/**
+ * Set the global language.
+ * Returns the applied key. Invalid or unpublished keys are ignored and the
+ * previous value is returned, so a bad value can never blank the UI.
+ */
+export function setActiveLanguage(key) {
+  const lang = getLanguage(key)
+  if (!lang || !lang.published) return activeLanguage
+  if (lang.key === activeLanguage) return activeLanguage
+  activeLanguage = lang.key
+  try {
+    globalThis.localStorage?.setItem(ACTIVE_LANGUAGE_KEY, lang.key)
+  } catch {
+    // Non-fatal: the language still applies for this session.
+  }
+  for (const fn of languageListeners) {
+    try {
+      fn(lang.key)
+    } catch (err) {
+      console.warn('language listener failed', err)
+    }
+  }
+  return activeLanguage
+}
+
+/** Subscribe to language changes. Returns an unsubscribe function. */
+export function onLanguageChange(fn) {
+  languageListeners.add(fn)
+  return () => languageListeners.delete(fn)
+}
+
 /**
  * Language switcher order matches the Reader buttons: Urdu | Roman | English | 中文
  * `file` builds the JSON file name for a given category.

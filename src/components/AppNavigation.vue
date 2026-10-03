@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <nav class="glass-nav">
     <div class="nav-container">
       <!-- Logo -->
@@ -20,6 +20,9 @@
 
       <!-- Right Actions -->
       <div class="nav-actions">
+        <!-- Global language selector -->
+        <LanguageSelector v-model="language" @change="onLanguageChange" />
+
         <!-- Theme Toggle -->
         <ThemeToggle />
 
@@ -61,6 +64,7 @@
           {{ item.title }}
         </router-link>
         <div class="mobile-actions">
+          <LanguageSelector v-model="language" @change="onLanguageChange" />
           <ThemeToggle />
           <div class="mobile-auth">
             <template v-if="user">
@@ -83,13 +87,45 @@
     <!-- Auth Modal -->
     <AuthModal v-model="authOpen" :start-mode="authMode" @authenticated="onAuthenticated" />
 
-    <!-- Circular Logo Modal (teleported so the nav's backdrop-filter
+    <!-- Logo Dialog (teleported so the nav's backdrop-filter
          cannot trap the fixed overlay) -->
     <teleport to="body">
       <transition name="fade">
-        <div v-if="logoOpen" class="logo-overlay" @click.self="logoOpen = false">
+        <div
+          v-if="logoOpen"
+          class="logo-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="logo-dialog-title"
+          @click.self="logoOpen = false"
+          @keydown.esc="logoOpen = false"
+        >
           <div class="logo-modal">
+            <button
+              type="button"
+              class="logo-close"
+              aria-label="Close"
+              @click="logoOpen = false"
+            >
+              <span aria-hidden="true">âœ•</span>
+            </button>
+
             <img :src="logoImage" alt="Church in Pakistan Logo" class="logo-modal-img" />
+
+            <h2 id="logo-dialog-title" class="logo-modal-title">Lord's Recovery Church</h2>
+            <p class="logo-modal-sub">Pakistan</p>
+
+            <nav class="logo-links" aria-label="Church information">
+              <router-link to="/about" class="logo-link" @click="logoOpen = false">
+                <span aria-hidden="true">â„¹ï¸</span> About Us
+              </router-link>
+              <a
+                class="logo-link"
+                :href="`mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('Feedback - Lord\'s Recovery Church app')}`"
+              >
+                <span aria-hidden="true">âœ‰ï¸</span> Feedback
+              </a>
+            </nav>
           </div>
         </div>
       </transition>
@@ -98,28 +134,64 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import AppLogo from './AppLogo.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import AuthModal from './AuthModal.vue'
+import LanguageSelector from './LanguageSelector.vue'
 import { authMethods } from '../js/firebase-config.js'
+import { useRouter } from 'vue-router'
+import {
+  getLanguage,
+  setActiveLanguage,
+  resolveInitialLanguage as initialLanguage
+} from '../js/hymnService.js'
 import logoImage from '../assets/logo.png'
+
+const FEEDBACK_EMAIL = 'churchpakistan52@gmail.com'
+const LANG_STORAGE_KEY = 'cip.language'
 
 const mobileMenuOpen = ref(false)
 const authOpen = ref(false)
 const authMode = ref('login')
 const logoOpen = ref(false)
 
+/** Global language. Seeded from localStorage, then from the ?lang= query so a
+ *  shared link lands in the right language, then the default. */
+const router = useRouter()
+
+/** Apply the resolved language to the store on boot, so pages that read the
+ *  global store agree with the selector on first paint. */
+const language = ref(initialLanguage())
+setActiveLanguage(language.value)
+
 const user = ref(null)
 
 const navItems = [
-  { title: 'Home', to: '/', icon: '🏠' },
-  { title: 'Reader', to: '/reader', icon: '🎵' },
-  { title: 'Library', to: '/library', icon: '📚' },
-  { title: 'Store', to: '/store', icon: '🛍️' },
-  { title: 'Events', to: '/events', icon: '📅' },
-  { title: 'About', to: '/about', icon: 'ℹ️' }
+  { title: 'Home', to: '/', icon: 'ðŸ ' },
+  { title: 'Reader', to: '/reader', icon: 'ðŸŽµ' },
+  { title: 'Library', to: '/library', icon: 'ðŸ“š' },
+  { title: 'Store', to: '/store', icon: 'ðŸ›ï¸' },
+  { title: 'Events', to: '/events', icon: 'ðŸ“…' },
+  { title: 'About', to: '/about', icon: 'â„¹ï¸' }
 ]
+
+/** Keep the whole app on one language, and reflect it in the URL when the
+ *  current route cares about the language (Library / Reader / List). */
+function onLanguageChange(key) {
+  setActiveLanguage(key)
+  mobileMenuOpen.value = false
+
+  const route = router.currentRoute.value
+  if (!route?.name) return
+  const wantsLanguage = ['library', 'reader', 'list'].includes(String(route.name))
+  if (!wantsLanguage) return
+
+  const query = { ...route.query, language: key }
+  // Keep whichever alias the route was already using so old links stay stable.
+  if (route.query.lang !== undefined) query.lang = key
+  router.replace({ path: route.path, query })
+}
 
 function openAuth(mode) {
   authMode.value = mode
@@ -168,6 +240,7 @@ onUnmounted(() => {
   }
 })
 </script>
+
 
 <style scoped>
 .nav-container {
@@ -421,30 +494,117 @@ onUnmounted(() => {
 }
 
 .logo-modal {
-  width: min(280px, 78vw);
-  height: min(280px, 78vw);
-  border-radius: 50%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 28px 24px;
+  border-radius: 20px;
+  width: min(340px, calc(100vw - 48px));
   background: var(--surface);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  overflow: hidden;
+  animation: modal-pop 0.28s ease;
+}
+
+@keyframes modal-pop {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-modal { animation: none; }
+}
+
+.logo-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(127, 127, 127, 0.16);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.logo-close:hover,
+.logo-close:focus-visible {
+  background: rgba(127, 127, 127, 0.3);
+  outline: none;
 }
 
 .logo-modal-img {
-  width: 100%;
-  height: 100%;
+  width: 120px;
+  height: 120px;
   object-fit: cover;
   border-radius: 50%;
   display: block;
   /* Seal fills 91-95% of the photo frame; zoom just enough to sit flush
      against the circular edge without cropping the outer rim/text. */
   transform: scale(1.06);
+}
+
+.logo-modal-title {
+  margin: 14px 0 2px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.logo-modal-sub {
+  margin: 0 0 16px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.logo-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(127, 127, 127, 0.24);
+  background: rgba(127, 127, 127, 0.08);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.logo-link:hover,
+.logo-link:focus-visible {
+  background: rgba(127, 127, 127, 0.18);
+  border-color: var(--primary-color, #4f7cff);
+  outline: none;
+}
+
+/* Teleported to <body>, so these transition classes are global, not scoped. */
+:global(.fade-enter-active),
+:global(.fade-leave-active) {
+  transition: opacity 0.22s ease;
+}
+
+:global(.fade-enter-from),
+:global(.fade-leave-to) {
+  opacity: 0;
 }
 
 /* Mobile responsive */

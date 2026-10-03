@@ -22,7 +22,8 @@ const svc = await import('./src/js/hymnService.js')
 const {
   JSON_BASE_URL, AUDIO_BASE_URL, getAudioUrl, getAudioUrlCandidates, findHymn,
   normalizeHymn, fetchHymn, buildJsonUrls, isUrdu, LANGUAGES, stripLetters,
-  normaliseCategory, fetchCatalog, categoriesFor, groupByCategory
+  normaliseCategory, fetchCatalog, categoriesFor, groupByCategory,
+  getActiveLanguage, setActiveLanguage, onLanguageChange, resolveInitialLanguage
 } = svc
 
 let pass = 0
@@ -203,6 +204,43 @@ eq('code', emptyErr && emptyErr.code, 'HYMN_ID_REQUIRED')
 ok('no URLs were tried', Boolean(emptyErr) && emptyErr.attempts.length === 0,
   emptyErr && JSON.stringify(emptyErr.attempts))
 ok('message does not mention 404', Boolean(emptyErr) && !/404/.test(emptyErr.message))
+
+console.log('\n--- 12. global language store ---')
+// The nav bar's LanguageSelector is the single source of truth.
+eq('defaults to urdu', getActiveLanguage(), 'urdu')
+eq('setActiveLanguage applies a published language',
+  setActiveLanguage('chinese'), 'chinese')
+eq('getActiveLanguage reflects it', getActiveLanguage(), 'chinese')
+
+ok('unknown key is rejected, previous value kept',
+  setActiveLanguage('klingon') === 'chinese' && getActiveLanguage() === 'chinese',
+  getActiveLanguage())
+
+ok('unpublished language is rejected',
+  setActiveLanguage('punjabi') === 'chinese' && getActiveLanguage() === 'chinese',
+  getActiveLanguage())
+
+let notified = null
+const off = onLanguageChange((k) => { notified = k })
+setActiveLanguage('english')
+eq('listeners are notified', notified, 'english')
+off()
+setActiveLanguage('urdu')
+eq('unsubscribed listener is not called again', notified, 'english')
+
+ok('a throwing listener does not break the others', (() => {
+  let reached = false
+  const a = onLanguageChange(() => { throw new Error('boom') })
+  const b = onLanguageChange(() => { reached = true })
+  setActiveLanguage('roman-urdu')
+  a(); b()
+  return reached === true
+})(), 'second listener still ran')
+
+ok('resolveInitialLanguage falls back for an unknown language',
+  resolveInitialLanguage('klingon') === 'urdu', resolveInitialLanguage('klingon'))
+ok('resolveInitialLanguage accepts a valid language',
+  resolveInitialLanguage('chinese') === 'chinese', resolveInitialLanguage('chinese'))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
