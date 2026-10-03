@@ -1,0 +1,24 @@
+{
+  "apps": [
+    {
+      "id": 1,
+      "appName": "Urdu Hymn Apps",
+      "version": "2.1.0",
+      "platform": "Android",
+      "description": "The official Urdu and English church hymnal application with audio support, lyrics search, and offline reading.",
+      "fileSize": "41.23 MB",
+      "downloadUrl": "https://github.com/Church62626/Church-in-Pakistan/raw/d8336450ac5fc2e0c864416fea864b89e97815cd/church-apps/Hymns.apk",
+      "iconPath": "icons/hymns.png"
+    },
+    {
+      "id": 2,
+      "appName": "Life-Study Broadcast Reader",
+      "version": "2.0.1",
+      "platform": "Android",
+      "description": "Companion app for streaming and reading Life-Study messages, ministry books, and daily bread materials.",
+      "fileSize": "21.5 MB",
+      "downloadUrl": "https://github.com/Church62626/Church-in-Pakistan/raw/d8336450ac5fc2e0c864416fea864b89e97815cd/church-apps/lifestudy-v2.0.1.apk",
+      "iconPath": "icons/lifestudy-icon.png"
+    }
+  ]
+}
