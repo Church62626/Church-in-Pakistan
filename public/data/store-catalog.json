@@ -1,0 +1,42 @@
+[
+  {
+    "id": "urdu-study-bible",
+    "title": "Urdu Study Bible",
+    "price": 3500,
+    "type": "physical",
+    "coverImage": "https://placehold.co/600x800/4F46E5/FFFFFF?text=Urdu+Study+Bible",
+    "description": "Complete Urdu text with cross-references and foot notes, hard bound. Printed for brothers and sisters serving in Punjab and Sindh."
+  },
+  {
+    "id": "zaboor-geet-book",
+    "title": "Zaboor & Geet Book",
+    "price": 1200,
+    "type": "physical",
+    "coverImage": "https://placehold.co/600x800/4338CA/FFFFFF?text=Zaboor+%26+Geet",
+    "description": "Printed Zaboor (Psalms) and Geet collection in Nastaliq script, used for congregation singing on Sundays and house meetings."
+  },
+  {
+    "id": "sunday-school-workbook",
+    "title": "Sunday School Workbook",
+    "price": 850,
+    "type": "physical",
+    "coverImage": "https://placehold.co/600x800/10B981/FFFFFF?text=Sunday+School",
+    "description": "Lesson workbook for classes 1 to 6 with memory verses, colouring pages and simple Bible stories for teachers and children."
+  },
+  {
+    "id": "daily-devotional-urdu",
+    "title": "Daily Devotional (Urdu)",
+    "price": 650,
+    "type": "physical",
+    "coverImage": "https://placehold.co/600x800/0EA5E9/FFFFFF?text=Daily+Devotional",
+    "description": "365 short Urdu readings for personal morning time with the Lord. Suitable for families and for distributing to new believers."
+  },
+  {
+    "id": "new-believer-handbook",
+    "title": "New Believer Handbook",
+    "price": 300,
+    "type": "digital",
+    "coverImage": "https://placehold.co/600x800/FF7F50/FFFFFF?text=New+Believer",
+    "description": "Digital PDF covering the basics of prayer, baptism, reading the Bible and gathering with the saints. Delivered by email after verification."
+  }
+]

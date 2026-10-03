@@ -1,0 +1,125 @@
+/* ========================================
+   Theme System - Light & Dark Modes
+   ======================================== */
+
+:root {
+  /* Primary Brand Colors */
+  --primary: #4F46E5;
+  --primary-light: #6366F1;
+  --primary-dark: #3730A3;
+  --primary-bg: rgba(79, 70, 229, 0.08);
+  
+  /* Action Accent */
+  --accent: #FF7F50;
+  --accent-hover: #FF6B3D;
+  --accent-light: rgba(255, 127, 80, 0.15);
+  
+  /* Light Mode (Default) */
+  --bg-primary: #F8F9FA;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F1F3F5;
+  --surface: rgba(255, 255, 255, 0.85);
+  --surface-hover: rgba(255, 255, 255, 0.95);
+  
+  /* Text Colors */
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
+  --text-inverse: #FFFFFF;
+  
+  /* Border & Shadow */
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
+  
+  /* Reader-specific */
+  --reader-bg: #F8F9FA;
+  --reader-text: #1F2937;
+  --reader-highlight: rgba(255, 127, 80, 0.25);
+  
+  /* Status Colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #3B82F6;
+}
+
+/* Dark Mode Override */
+[data-theme="dark"] {
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E1E;
+  --bg-tertiary: #2A2A2A;
+  --surface: rgba(30, 30, 30, 0.85);
+  --surface-hover: rgba(40, 40, 40, 0.95);
+  
+  --text-primary: #E5E7EB;
+  --text-secondary: #9CA3AF;
+  --text-tertiary: #6B7280;
+  
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  
+  --reader-bg: #121212;
+  --reader-text: #E5E7EB;
+  --reader-highlight: rgba(255, 127, 80, 0.35);
+  
+  --primary-bg: rgba(79, 70, 229, 0.2);
+  --accent-light: rgba(255, 127, 80, 0.2);
+}
+
+/* Theme Transition */
+body,
+.v-application {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Ensure all elements inherit theme colors */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Base body styling */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+/* Vuetify theme overrides */
+.v-application {
+  background: var(--bg-primary) !important;
+}
+
+.v-card,
+.v-sheet {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color);
+}
+
+.v-btn--variant-text {
+  color: var(--text-primary) !important;
+}
+
+.v-app-bar {
+  background: rgba(30, 30, 30, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .v-app-bar {
+  background: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Smooth theme toggle animation */
+[data-theme] {
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

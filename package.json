@@ -1,0 +1,26 @@
+{
+  "name": "church-in-pakistan",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "sync:book": "node scripts/sync-book.mjs",
+    "sync:scan": "node scripts/sync-book.mjs --scan",
+    "sync:hymns": "node scripts/sync-hymns.mjs",
+    "sync:hymns:dry": "node scripts/sync-hymns.mjs --dry-run"
+  },
+  "dependencies": {
+    "@tonejs/midi": "^2.0.28",
+    "firebase": "^11.10.0",
+    "firebase-admin": "^14.5.0",
+    "vue": "^3.5.42",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.3.0"
+  }
+}

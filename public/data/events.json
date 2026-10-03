@@ -1,0 +1,47 @@
+[
+  {
+    "id": "sunday-worship",
+    "title": "Sunday Worship Service",
+    "date": "2026-10-04",
+    "time": "10:00 AM – 12:30 PM",
+    "location": "Lord's Recovery Church Hall, Lahore",
+    "description": "Our weekly gathering for worship, the breaking of bread and the ministry of the Word. Families and visitors are warmly welcome; Zaboor & Geet books are provided at the door.",
+    "coverImage": "https://placehold.co/800x500/4F46E5/FFFFFF?text=Sunday+Worship"
+  },
+  {
+    "id": "wednesday-bible-study",
+    "title": "Wednesday Bible Study",
+    "date": "2026-10-07",
+    "time": "6:30 PM – 8:00 PM",
+    "location": "Church Library Room",
+    "description": "A verse-by-verse study through the book of Romans, with time for questions and discussion. Bring your Urdu Study Bible; printed outlines are available for those who need them.",
+    "coverImage": "https://placehold.co/800x500/4338CA/FFFFFF?text=Bible+Study"
+  },
+  {
+    "id": "youth-fellowship",
+    "title": "Youth Fellowship",
+    "date": "2026-10-11",
+    "time": "4:00 PM – 6:30 PM",
+    "location": "Church Courtyard & Youth Room",
+    "description": "An afternoon for young brothers and sisters — singing, a short message on walking with the Lord, refreshments and games. Parents are welcome to stay.",
+    "coverImage": "https://placehold.co/800x500/7C3AED/FFFFFF?text=Youth+Fellowship"
+  },
+  {
+    "id": "monthly-fasting-prayer",
+    "title": "Monthly Fasting & Prayer",
+    "date": "2026-10-18",
+    "time": "8:00 AM – 3:00 PM",
+    "location": "Main Prayer Hall",
+    "description": "A day set apart for fasting and united prayer for the church in Pakistan, for the persecuted, and for the spread of the gospel. Lunch is served at the close of the meeting.",
+    "coverImage": "https://placehold.co/800x500/0EA5E9/FFFFFF?text=Fasting+%26+Prayer"
+  },
+  {
+    "id": "sunday-school-teachers-training",
+    "title": "Sunday School Teachers' Training",
+    "date": "2026-10-25",
+    "time": "9:00 AM – 1:00 PM",
+    "location": "Church Library Room",
+    "description": "Equipping for brothers and sisters teaching children's classes: lesson preparation, memory verses and handling questions with gentleness. Workbooks are distributed at the end.",
+    "coverImage": "https://placehold.co/800x500/10B981/FFFFFF?text=Teachers+Training"
+  }
+]

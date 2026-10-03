@@ -1,0 +1,166 @@
+/* ========================================
+   Font Configuration - Lord's Recovery Church
+   Multi-script: Latin, Arabic (Nastaliq + Naskh),
+   Gurmukhi (Punjabi) and CJK
+   ======================================== */
+
+/* UI & Navigation Font Family */
+:root {
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro', Roboto, sans-serif;
+  
+  /* Digital Reader Body Font Family (English) */
+  --font-reader: 'Merriweather', Georgia, 'Times New Roman', serif;
+  
+  /* ---- Script font families ----
+     Nastaliq is Urdu-only (it is calligraphic Urdu, not a general Arabic face).
+     Regional Arabic-script languages (Pashto/Shahmukhi, Sindhi, Balochi) use
+     Noto Naskh Arabic instead, which has the correct Persian/Arabic letterforms
+     and diacritic placement. Gurmukhi gets its own stack for Punjabi. */
+  --font-urdu-body: 'Jameel Noori Nastaliq', 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', sans-serif;
+  --font-urdu-heading: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaliq', sans-serif;
+  --font-arabic-body: 'Noto Naskh Arabic', 'Noto Nastaliq Urdu', 'Segoe UI', sans-serif;
+  --font-arabic-heading: 'Noto Naskh Arabic', 'Noto Nastaliq Urdu', sans-serif;
+  --font-gurmukhi-body: 'Noto Sans Gurmukhi', 'Noto Serif Gurmukhi', 'Raavi', sans-serif;
+  --font-gurmukhi-heading: 'Noto Sans Gurmukhi', 'Noto Serif Gurmukhi', 'Raavi', sans-serif;
+  /* CJK needs a generous line box or glyphs collide */
+  --font-cjk-body: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  
+  /* Base font size for responsive typography */
+  --font-size-base: 16px;
+  --font-size-sm: 14px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+}
+
+/* Ensure Urdu text renders correctly */
+[lang="ur"],
+.urdu-text {
+  font-family: var(--font-urdu-body);
+  direction: rtl;
+  text-align: right;
+  line-height: 2.2;
+  font-size: 1.15em;
+}
+
+/* ---- Script-scoped typography ----
+   Each script gets its own font stack and its own leading, because Nastaliq
+   needs far more vertical space than Naskh, and CJK needs even more than that.
+   `.script-*` classes are applied by hymnService.scriptClass(). */
+
+/* Arabic-script, Naskh-style: Pashto (Shahmukhi), Sindhi, Balochi */
+.script-arabic-naskh {
+  font-family: var(--font-arabic-body);
+  direction: rtl;
+  text-align: right;
+  line-height: 1.9;
+}
+
+/* Urdu in Nastaliq */
+.script-arabic-nastaliq {
+  font-family: var(--font-urdu-body);
+  direction: rtl;
+  text-align: right;
+  line-height: 2.2;
+}
+
+/* Punjabi in Gurmukhi - LTR, but needs a taller line box for matras/headlines */
+.script-gurmukhi {
+  font-family: var(--font-gurmukhi-body);
+  direction: ltr;
+  text-align: left;
+  line-height: 1.95;
+}
+
+/* Chinese/Japanese/Korean */
+.script-cjk {
+  font-family: var(--font-cjk-body);
+  direction: ltr;
+  text-align: left;
+  line-height: 2.1;
+}
+
+/* Latin (English / Roman Urdu) - the default reader face */
+.script-latin {
+  font-family: var(--font-reader);
+  direction: ltr;
+  text-align: left;
+  line-height: 1.9;
+}
+
+/* Headings follow their own script's heading stack */
+.script-arabic-naskh h1,
+.script-arabic-naskh h2,
+.script-arabic-naskh h3,
+.script-gurmukhi h1,
+.script-gurmukhi h2,
+.script-gurmukhi h3,
+.script-cjk h1,
+.script-cjk h2,
+.script-cjk h3 {
+  font-family: inherit;
+  line-height: 1.7;
+}
+
+[lang="ur"] h1,
+[lang="ur"] h2,
+[lang="ur"] h3,
+.urdu-text h1,
+.urdu-text h2,
+.urdu-text h3 {
+  font-family: var(--font-urdu-heading);
+  line-height: 1.8;
+}
+
+/* Reader-specific typography */
+.reader-content {
+  font-family: var(--font-reader);
+  font-size: var(--font-size-lg);
+  line-height: 1.9;
+  color: var(--text-primary);
+}
+
+.reader-content p {
+  margin-bottom: 1.5em;
+  text-align: justify;
+}
+
+/* Responsive font sizing for mobile */
+@media (max-width: 768px) {
+  :root {
+    --font-size-base: 15px;
+    --font-size-lg: 17px;
+  }
+  
+  .reader-content {
+    font-size: var(--font-size-base);
+    line-height: 1.8;
+  }
+}
+
+/* Smooth font loading */
+body {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Font display swap for performance */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Inter'), local('Arial');
+  size-adjust: 105%;
+  ascent-override: 95%;
+  descent-override: 20%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Merriweather Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 110%;
+  ascent-override: 95%;
+  descent-override: 15%;
+  line-gap-override: 0%;
+}
