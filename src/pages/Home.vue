@@ -22,6 +22,14 @@
       </div>
     </section>
 
+    <!-- Auto-advancing highlights. Each card describes something that is
+         actually built and reachable, so nothing here over-promises. -->
+    <section class="carousel-section">
+      <div class="container">
+        <HeroCarousel :slides="slides" />
+      </div>
+    </section>
+
     <!-- Features Grid -->
     <section class="features-section">
       <div class="container">
@@ -44,6 +52,43 @@
 
 <script setup>
 import { ref } from 'vue'
+import HeroCarousel from '../components/HeroCarousel.vue'
+
+// Carousel highlights. Every card points at a page that exists and works.
+const slides = ref([
+  {
+    eyebrow: 'Read & study',
+    title: '800+ hymns in four languages',
+    text: 'Urdu, Roman Urdu, English and Chinese, organised by category and sub-category so you can find the hymn you need quickly.',
+    icon: '📖',
+    to: '/library',
+    cta: 'Open the Library'
+  },
+  {
+    eyebrow: 'Jump straight to a number',
+    title: 'Find a hymn by number',
+    text: 'Use the on-screen keypad or search by title to open a hymn directly, without browsing through the whole book.',
+    icon: '🔢',
+    to: '/list',
+    cta: 'Go to the hymn list'
+  },
+  {
+    eyebrow: 'Listen',
+    title: 'Play the hymnal',
+    text: 'Stream recordings with a playback speed slider, so you can slow a hymn down to learn it or speed it up to review.',
+    icon: '🎧',
+    to: '/listen',
+    cta: 'Start listening'
+  },
+  {
+    eyebrow: 'Gather together',
+    title: 'Events & conferences',
+    text: 'Keep up with what is coming up at the church and register for the gatherings you want to attend.',
+    icon: '📅',
+    to: '/events',
+    cta: 'See events'
+  }
+])
 
 // Feature highlights
 const features = ref([
@@ -170,6 +215,12 @@ const features = ref([
 
 .btn-icon {
   font-size: 1.2rem;
+}
+
+/* Carousel Section */
+.carousel-section {
+  padding: 10px 0 70px;
+  background: var(--bg-primary);
 }
 
 /* Features Section */

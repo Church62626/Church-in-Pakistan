@@ -454,5 +454,29 @@ ok('...and a Chinese midi resolves too',
   getAudioUrl('hymnal', '1', 'midi').includes('/MIDI/hymns/1.mid'),
   getAudioUrl('hymnal', '1', 'midi'))
 
+/* ---- 14. Home carousel ---- */
+console.log('\n--- 14. Home carousel ---')
+const car = read('./src/components/HeroCarousel.vue')
+const home = read('./src/pages/Home.vue')
+ok('Home renders the carousel', home.includes('<HeroCarousel'))
+ok('carousel is imported', /import HeroCarousel from/.test(home))
+ok('it advances on a timer', /setInterval/.test(car))
+ok('the timer is cleared on unmount', /onUnmounted\(stop\)/.test(car) && /clearInterval/.test(car))
+ok('the index wraps instead of dead-ending', /\(\(next % n\) \+ n\) % n/.test(car))
+ok('it renders one dot per slide', /v-for="\(slide, i\) in slides"/.test(car) && /carousel-dot/.test(car))
+// Auto-advancing content is a WCAG 2.2.2 hazard: it must be pausable.
+ok('it has an explicit pause control', /class="carousel-pause"/.test(car) && /togglePause/.test(car))
+ok('...exposed to assistive tech', /aria-pressed="paused"/.test(car) && /aria-label="paused \?/.test(car))
+ok('...and pauses on hover/focus', /@mouseenter="pause"/.test(car) && /@focusin="pause"/.test(car))
+ok('reduced-motion users get a still carousel',
+  /prefers-reduced-motion: reduce/.test(car) && /paused\.value = true/.test(car))
+ok('off-screen slides are hidden from AT', /:aria-hidden="i !== index"/.test(car))
+ok('arrows have accessible names', /aria-label="Previous slide"/.test(car) && /aria-label="Next slide"/.test(car))
+// A card linking to a route that does not exist is worse than no card at all.
+const slideLinks = [...home.matchAll(/to: '(\/[\w-]*)'/g)].map((m) => m[1])
+ok('every slide points at a real route', slideLinks.length > 0 && slideLinks.every((p) =>
+  routes.includes(`path: '${p}'`) || p === '/'), slideLinks.join(', '))
+ok('slides do not link to the old /reader', !slideLinks.includes('/reader'))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
