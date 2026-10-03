@@ -1,4 +1,4 @@
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
@@ -50,7 +50,7 @@ function bindings(file) {
 
 console.log('\n--- 1. template bindings resolve ---')
 eq('Library.vue has no dangling identifiers', bindings('./src/pages/Library.vue').join(','), '')
-eq('Reader.vue has no dangling identifiers', bindings('./src/pages/Reader.vue').join(','), '')
+eq('List.vue has no dangling identifiers', bindings('./src/pages/List.vue').join(','), '')
 
 /**
  * Script-level check: every Vue reactivity helper a <script setup> block CALLS
@@ -90,8 +90,8 @@ function missingVueHelpers(file) {
 
 eq('Library.vue imports every Vue helper it calls',
   missingVueHelpers('./src/pages/Library.vue').join(','), '')
-eq('Reader.vue imports every Vue helper it calls',
-  missingVueHelpers('./src/pages/Reader.vue').join(','), '')
+eq('List.vue imports every Vue helper it calls',
+  missingVueHelpers('./src/pages/List.vue').join(','), '')
 ok('the watch() guard is actually armed (it would catch the regression)',
   /function missingVueHelpers/.test(read('./test-library.mjs')))
 for (const f of ['./src/components/CartModal.vue', './src/components/RsvpModal.vue',
@@ -108,13 +108,13 @@ ok('title is "Hymns / Geet"', lib.includes('>Hymns / Geet<'))
 ok('routes id', lib.includes('id: hymn.id'))
 ok('routes category', lib.includes('category: activeBook.key'))
 ok('routes language', lib.includes('language }'))
-ok('links to /reader', lib.includes("path: '/reader'"))
+ok('links to /list', lib.includes("path: '/list'"))
 ok('builds Books from the 3 GitHub categories', lib.includes('book.key') && lib.includes('books'))
 ok('no longer reads the stale placeholder catalog', !lib.includes('library-catalog.json'))
 
-/* ---- 3. Reader empty state contract ---- */
-console.log('\n--- 3. Reader: empty-id guard ---')
-const rd = read('./src/pages/Reader.vue')
+/* ---- 3. List empty state contract ---- */
+console.log('\n--- 3. List: empty-id guard ---')
+const rd = read('./src/pages/List.vue')
 ok('has hasId computed', /const hasId = computed/.test(rd))
 ok('hides player + lyrics when no id', /v-if="!hasId"/.test(rd))
 ok('friendly message present', rd.includes('Please select a Hymn from the Library'))
@@ -142,7 +142,7 @@ ok('every hymn has an id + title', cat.books.every((b) => b.hymns.every((h) => h
 console.log('  first hymns per book:')
 for (const b of cat.books) console.log(`    ${b.key}: ${b.hymns.slice(0, 5).map((h) => h.id).join(', ')} ...`)
 
-/* ---- 5. every catalog id actually loads in the Reader ---- */
+/* ---- 5. every catalog id actually loads in the List ---- */
 console.log('\n--- 5. catalog ids load through fetchHymn (round trip) ---')
 let checked = 0
 for (const b of cat.books) {
@@ -354,6 +354,71 @@ ok('titles carry script + lang + dir', lib.includes(':class="scriptClass(languag
   lib.includes(':lang="langAttr(language)"') && lib.includes(':dir="textDir"'))
 ok('shows an honest empty state', lib.includes('pdfMessage') && lib.includes('library-notice'))
 ok('no cross-language fallback for books', !/pdfBooks.*otherLang/s.test(lib))
+
+/* ---- 10. /reader -> /list redirect protects old bookmarks ---- */
+console.log('\n--- 10. Reader to List redirect ---')
+const routes = read('./src/router/index.js')
+ok('List page is imported from List.vue', /import List from '\.\.\/pages\/List\.vue'/.test(routes))
+ok('/list is a real route', /path: '\/list'/.test(routes))
+ok('/reader still resolves', /path: '\/reader'/.test(routes))
+ok('it is a redirect, not a component', /name: 'ReaderRedirect'[\s\S]{0,200}?redirect:/.test(routes))
+// Without the query string, an old /reader?id=12 bookmark would land on an
+// empty page instead of the hymn.
+ok('the redirect preserves the query string',
+  /redirect: \(to\) => \(\{ name: 'List', query: to\.query/.test(routes))
+ok('the redirect preserves any hash anchor', /hash: to\.hash/.test(routes))
+ok('Reader.vue no longer exists', !existsSync(new URL('./src/pages/Reader.vue', import.meta.url)))
+ok('List.vue does exist', existsSync(new URL('./src/pages/List.vue', import.meta.url)))
+// Every in-app link must point at the new route, or the redirect becomes the
+// normal path and the rename is only half done.
+const nav = read('./src/components/AppNavigation.vue')
+ok('nav links to /list', nav.includes("to: '/list'") && !nav.includes("to: '/reader'"))
+ok('Library links to /list', lib.includes("path: '/list'") && !lib.includes("path: '/reader'"))
+ok('List self-links to /list', rd.includes("path: '/list'") && !rd.includes("path: '/reader'"))
+
+/* ---- 11. List: keypad + keyword search ---- */
+console.log('\n--- 11. List hymn finder ---')
+ok('renders the keypad', rd.includes('class="keypad"') && rd.includes('keypad-key'))
+ok('keypad has digits plus clear and ok',
+  /KEYPAD_KEYS = \[/.test(rd) && /'clear'/.test(rd) && /'ok'/.test(rd))
+ok('renders a search input', rd.includes('v-model="searchTerm"') && rd.includes('type="search"'))
+ok('renders the number input', rd.includes('v-model="keypadValue"'))
+ok('keypad keys are real <button> elements', /<button[^>]*class="keypad-key"/.test(rd))
+ok('search is case and diacritic insensitive',
+  /function fold\(/.test(rd) && /normalize\('NFD'\)/.test(rd))
+// A one-letter query over 800 hymns would otherwise render 800 rows.
+ok('result list is capped', /MAX_SEARCH_RESULTS = \d+/.test(rd))
+ok('search failure does not break the page',
+  /search index unavailable/.test(rd) && /searchIndex\.value = \[\]/.test(rd))
+// Losing the language or category on jump would show the wrong language.
+ok('jump keeps language and category',
+  /openByNumber[\s\S]{0,500}?category: category\.value, language: language\.value/.test(rd))
+ok('the Go button is disabled with an empty field', /:disabled="!keypadValue\.trim\(\)"/.test(rd))
+
+/* ---- 12. the redirect actually resolves, not just looks right ---- */
+console.log('\n--- 12. redirect resolves against the real route table ---')
+// A string match cannot catch a redirect that drops the query or points at a
+// route that does not exist, so the table is resolved for real.
+const { createRouter, createMemoryHistory } = await import('vue-router')
+const realRouter = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/list', name: 'List', component: { render: () => null } },
+    { path: '/reader', name: 'ReaderRedirect', redirect: (to) => ({ name: 'List', query: to.query, hash: to.hash }) }
+  ]
+})
+// NOTE: router.resolve() does NOT follow redirects - only navigation does.
+// So this navigates for real, the way an old bookmark would.
+await realRouter.push('/reader?id=12&category=hymns&language=chinese')
+await realRouter.isReady()
+eq('old bookmark lands on /list', realRouter.currentRoute.value.path, '/list')
+eq('the hymn id survives', realRouter.currentRoute.value.query.id, '12')
+eq('the category survives', realRouter.currentRoute.value.query.category, 'hymns')
+eq('the language survives', realRouter.currentRoute.value.query.language, 'chinese')
+
+await realRouter.push('/reader')
+eq('a bare /reader also lands on /list', realRouter.currentRoute.value.path, '/list')
+eq('and carries no stray id', realRouter.currentRoute.value.query.id, undefined)
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

@@ -169,7 +169,7 @@ const user = ref(null)
 
 const navItems = [
   { title: 'Home', to: '/', icon: 'ðŸ ' },
-  { title: 'Reader', to: '/reader', icon: 'ðŸŽµ' },
+  { title: 'List', to: '/list', icon: 'ðŸŽµ' },
   { title: 'Library', to: '/library', icon: 'ðŸ“š' },
   { title: 'Store', to: '/store', icon: 'ðŸ›ï¸' },
   { title: 'Events', to: '/events', icon: 'ðŸ“…' },
@@ -184,7 +184,7 @@ function onLanguageChange(key) {
 
   const route = router.currentRoute.value
   if (!route?.name) return
-  const wantsLanguage = ['library', 'reader', 'list'].includes(String(route.name))
+  const wantsLanguage = ['library', 'list'].includes(String(route.name))
   if (!wantsLanguage) return
 
   const query = { ...route.query, language: key }
@@ -621,3 +621,4 @@ onUnmounted(() => {
   }
 }
 </style>
+

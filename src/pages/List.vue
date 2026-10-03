@@ -1,10 +1,10 @@
-<template>
+﻿<template>
   <div class="reader-page">
     <div class="reader-container">
       <!-- Floating reader controls -->
       <div class="reader-toolbar">
         <router-link to="/library" class="toolbar-back">
-          <span aria-hidden="true">←</span>
+          <span aria-hidden="true">â†</span>
           Back to Library
         </router-link>
 
@@ -18,6 +18,84 @@
           </button>
         </div>
       </div>
+
+      <!-- Hymn finder: numeric keypad + keyword search.
+           Lets someone jump straight to a hymn number without going back
+           through the Library, which is how a hymnal is normally used. -->
+      <section class="hymn-finder glass-card" aria-labelledby="finder-heading">
+        <h2 id="finder-heading" class="finder-heading">Find a hymn</h2>
+
+        <div class="finder-fields">
+          <label class="finder-field">
+            <span>Hymn number</span>
+            <input
+              v-model="keypadValue"
+              class="finder-input"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="6"
+              placeholder="e.g. 12"
+              aria-describedby="finder-hint"
+            />
+          </label>
+
+          <label class="finder-field finder-field-grow">
+            <span>Search by title or keyword</span>
+            <input
+              v-model="searchTerm"
+              class="finder-input"
+              type="search"
+              placeholder="Search hymns..."
+            />
+          </label>
+
+          <button
+            type="button"
+            class="finder-go"
+            :disabled="!keypadValue.trim()"
+            @click="openByNumber"
+          >
+            Go
+          </button>
+        </div>
+
+        <!-- Numeric keypad. Big targets: this is used one-handed on a phone. -->
+        <div class="keypad" role="group" aria-label="Hymn number keypad">
+          <button
+            v-for="key in KEYPAD_KEYS"
+            :key="key"
+            type="button"
+            class="keypad-key"
+            :class="{ wide: key === 'clear' }"
+            :aria-label="key === 'clear' ? 'Clear' : key"
+            @click="pressKey(key)"
+          >
+            {{ key === 'clear' ? 'C' : key }}
+          </button>
+        </div>
+
+        <p id="finder-hint" class="finder-hint">
+          {{ searchResults.length }}
+          {{ searchResults.length === 1 ? 'match' : 'matches' }}
+          <template v-if="searchTerm.trim()"> for "{{ searchTerm.trim() }}"</template>
+        </p>
+
+        <ul v-if="searchResults.length" class="finder-results">
+          <li v-for="r in searchResults" :key="`${r.id}-${r.title}`">
+            <router-link
+              class="finder-result"
+              :to="{ path: '/list', query: { id: r.id, category, language } }"
+            >
+              <span class="finder-result-no">{{ r.no ?? r.id }}</span>
+              <span class="finder-result-title" :class="scriptClass(language)">{{ r.title }}</span>
+            </router-link>
+          </li>
+        </ul>
+        <p v-else-if="searchTerm.trim()" class="finder-empty">
+          No hymns match "{{ searchTerm.trim() }}".
+        </p>
+      </section>
 
       <!-- Language switcher. Every language in the service is listed, including
            regional ones whose content is not published yet - those stay
@@ -44,7 +122,7 @@
           <span v-if="lang.native !== lang.label" class="lang-native" :lang="lang.lang">
             {{ lang.native }}
           </span>
-          <span v-if="!lang.published" class="lang-pending" aria-hidden="true" title="Content not published yet">•</span>
+          <span v-if="!lang.published" class="lang-pending" aria-hidden="true" title="Content not published yet">â€¢</span>
         </button>
       </nav>
 
@@ -71,21 +149,21 @@
 
       <!-- No hymn id in the route: hide the player and the lyrics area entirely -->
       <div v-if="!hasId" class="reader-empty glass-card">
-        <span class="empty-icon" aria-hidden="true">📖</span>
+        <span class="empty-icon" aria-hidden="true">ðŸ“–</span>
         <h2 class="empty-title">Please select a Hymn from the Library</h2>
         <p class="empty-text">
           This page needs a hymn number. Open the Library, pick a book, then choose a hymn
           to read its lyrics and play its audio.
         </p>
         <router-link to="/library" class="empty-cta">
-          <span aria-hidden="true">📚</span>
+          <span aria-hidden="true">ðŸ“š</span>
           Browse Hymns / Geet
         </router-link>
       </div>
 
       <template v-else>
       <p v-if="isSample" class="reader-notice">
-        Showing the bundled sample — the GitHub lyric files for this language have not been
+        Showing the bundled sample â€” the GitHub lyric files for this language have not been
         published yet.
       </p>
 
@@ -119,8 +197,8 @@
             @click="togglePlay"
           >
             <span v-if="isBusy" class="spin" aria-hidden="true" />
-            <span v-else-if="!isPlaying" class="play-icon">▶</span>
-            <span v-else class="pause-icon">⏸</span>
+            <span v-else-if="!isPlaying" class="play-icon">â–¶</span>
+            <span v-else class="pause-icon">â¸</span>
           </button>
 
           <div class="audio-info">
@@ -228,7 +306,8 @@ import {
   langAttr,
   isRtl,
   isUnpublished,
-  CATEGORY_META
+  CATEGORY_META,
+  fetchCatalog
 } from '../js/hymnService'
 
 const route = useRoute()
@@ -274,12 +353,93 @@ const languageLabel = computed(() => (langMeta.value && langMeta.value.label) ||
 const categoryLabel = computed(() => CATEGORY_META.find((c) => c.key === category.value)?.label || category.value)
 const isSample = computed(() => Boolean(hymn.value && hymn.value.source === 'local'))
 
-/** True only when the route actually carries a hymn id (e.g. /reader?id=12). */
+/** True only when the route actually carries a hymn id (e.g. /list?id=12). */
 const hasId = computed(() => Boolean(requestedId.value.trim()))
 
 function adjustFontSize(delta) {
   const next = fontSize.value + delta * 2
   fontSize.value = Math.min(32, Math.max(12, next))
+}
+
+/* ------------------------------------------------------------------ *
+ * Hymn finder: numeric keypad + keyword search
+ * ------------------------------------------------------------------ */
+
+const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'ok']
+const keypadValue = ref(requestedId.value.trim())
+const searchTerm = ref('')
+/** Cap the rendered result list so a one-letter query cannot build
+ *  thousands of DOM nodes. */
+const MAX_SEARCH_RESULTS = 50
+
+/** Digit-only, capped at 6 so the field cannot grow unbounded. */
+function pressKey(key) {
+  if (key === 'clear') {
+    keypadValue.value = ''
+    return
+  }
+  if (key === 'ok') {
+    openByNumber()
+    return
+  }
+  if (keypadValue.value.length >= 6) return
+  keypadValue.value += key
+}
+
+/** Navigate to the typed hymn number, keeping language and category. */
+function openByNumber() {
+  const id = keypadValue.value.trim()
+  if (!id) return
+  router.push({ path: '/list', query: { id, category: category.value, language: language.value } })
+}
+
+/** Every hymn in the current language, for searching. */
+const searchIndex = ref([])
+
+/**
+ * Case- and diacritic-insensitive matching. Chinese has no case, and Arabic
+ * script has no case distinction in these titles, so lowercasing plus NFD
+ * accent stripping is enough to make "grace" find "Grace" without hiding a
+ * title behind an accent.
+ */
+function fold(text) {
+  return String(text ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+const searchResults = computed(() => {
+  const term = fold(searchTerm.value.trim())
+  if (!term) return []
+  const out = []
+  for (const item of searchIndex.value) {
+    if (fold(item.title).includes(term)) out.push(item)
+    if (out.length >= MAX_SEARCH_RESULTS) break
+  }
+  return out
+})
+
+/** Load the searchable title list for a language. Failures are silent and
+ *  leave the keypad working - search is an extra, not a requirement. */
+async function loadSearchIndex(lang) {
+  try {
+    const catalog = await fetchCatalog(lang)
+    const seen = new Set()
+    const items = []
+    for (const book of catalog?.books ?? []) {
+      for (const h of book.hymns ?? []) {
+        const key = `${h.id}:${h.title}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        items.push({ id: h.id, no: h.no ?? h.zh_no, title: h.title || h.id })
+      }
+    }
+    searchIndex.value = items
+  } catch (err) {
+    console.warn('hymn search index unavailable:', err.message)
+    searchIndex.value = []
+  }
 }
 
 async function loadHymn() {
@@ -521,7 +681,7 @@ async function verifyMp3(list) {
 
     if (token !== mp3Token) return
     currentAudioUrl.value = ''
-    audioStatus.value = `No ${modeLabel.value} file could be loaded for hymn “${requestedId.value.trim()}”.`
+    audioStatus.value = `No ${modeLabel.value} file could be loaded for hymn â€œ${requestedId.value.trim()}â€.`
   } finally {
     // Always release the spinner, on every path including a timeout.
     if (token === mp3Token) mp3Loading.value = false
@@ -539,7 +699,7 @@ async function loadMidi(list) {
 
   midiLoading.value = true
   midiReady.value = false
-  midiStatus('Preparing music…')
+  midiStatus('Preparing musicâ€¦')
 
   try {
     for (const url of list) {
@@ -561,7 +721,7 @@ async function loadMidi(list) {
         currentTime.value = 0
         duration.value = parsed.duration
         midiStatus(
-          `${parsed.notes.length} notes · ${instrumentLabel(instrument.value)} · rendered in your browser`
+          `${parsed.notes.length} notes Â· ${instrumentLabel(instrument.value)} Â· rendered in your browser`
         )
         return
       } catch (err) {
@@ -574,7 +734,7 @@ async function loadMidi(list) {
     // Every candidate failed: report it. The finally block still clears the
     // spinner, so the button is immediately retryable.
     midiReady.value = false
-    midiStatus(`No ${modeLabel.value} file could be loaded for hymn “${requestedId.value.trim()}”.`)
+    midiStatus(`No ${modeLabel.value} file could be loaded for hymn â€œ${requestedId.value.trim()}â€.`)
   } finally {
     if (token === midiLoadToken) midiLoading.value = false
   }
@@ -587,7 +747,7 @@ function midiStatus(message) {
 function onInstrumentChange() {
   midi.setInstrument(instrument.value)
   if (midiReady.value) {
-    midiStatus(`${instrumentLabel(instrument.value)} · rendered in your browser`)
+    midiStatus(`${instrumentLabel(instrument.value)} Â· rendered in your browser`)
   }
 }
 
@@ -618,7 +778,7 @@ function onAudioError() {
   // Every candidate has now failed: report it and leave the transport idle
   // rather than spinning forever.
   mp3Loading.value = false
-  audioStatus.value = `No ${modeLabel.value} file found for hymn “${requestedId.value.trim()}”.`
+  audioStatus.value = `No ${modeLabel.value} file found for hymn â€œ${requestedId.value.trim()}â€.`
 }
 
 /**
@@ -635,7 +795,7 @@ async function togglePlay() {
     // so a transient network failure is recoverable from the same button.
     const id = requestedId.value.trim()
     if (id) {
-      audioStatus.value = 'Retrying…'
+      audioStatus.value = 'Retryingâ€¦'
       applyAudioSource()
     }
     return
@@ -793,6 +953,14 @@ function onEnded() {
 onMounted(() => {
   loadHymn()
   applyAudioSource()
+  loadSearchIndex(language.value)
+})
+
+// Re-index when the language changes so search results stay in the language
+// actually being read.
+watch(language, (key) => {
+  searchTerm.value = ''
+  loadSearchIndex(key)
 })
 
 /**
@@ -809,7 +977,7 @@ function selectLanguage(key) {
   }
 
   router.replace({
-    path: '/reader',
+    path: '/list',
     query: { ...route.query, language: key, id: requestedId.value, category: category.value }
   })
 }
@@ -1460,4 +1628,5 @@ onBeforeUnmount(() => {
 }
 
 </style>
+
 

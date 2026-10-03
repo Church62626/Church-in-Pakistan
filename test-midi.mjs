@@ -64,7 +64,7 @@ ok('url points at FluidR3_GM on jsDelivr',
 
 /* ---- 3. Reader wiring ---- */
 console.log('\n--- 3. Reader integrates the engine ---')
-const rd = read('./src/pages/Reader.vue')
+const rd = read('./src/pages/List.vue')
 ok('imports MidiEngine', /import\s*\{[^}]*MidiEngine[^}]*\}\s*from '\.\.\/js\/midiEngine'/.test(rd))
 ok('builds a single engine', /new MidiEngine\(\)/.test(rd))
 ok('audio tag is MP3-only (v-if)', /v-if="audioMode === 'mp3' && currentAudioUrl"/.test(rd))

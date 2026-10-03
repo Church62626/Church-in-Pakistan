@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../pages/Home.vue'
-import Reader from '../pages/Reader.vue'
+import List from '../pages/List.vue'
 import Library from '../pages/Library.vue'
 import Store from '../pages/Store.vue'
 import Events from '../pages/Events.vue'
@@ -13,9 +13,17 @@ const routes = [
     component: Home
   },
   {
+    path: '/list',
+    name: 'List',
+    component: List
+  },
+  {
+    // The Reader page was renamed to List. Existing bookmarks, shared links and
+    // QR codes pointing at /reader must keep working, so this redirect keeps
+    // the whole query string (id, category, language) intact.
     path: '/reader',
-    name: 'Reader',
-    component: Reader
+    name: 'ReaderRedirect',
+    redirect: (to) => ({ name: 'List', query: to.query, hash: to.hash })
   },
   {
     path: '/library',
