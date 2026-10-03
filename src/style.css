@@ -123,6 +123,62 @@ body {
 }
 
 /* ========================================
+   Hymn Finder Keypad - global safety net
+   ========================================
+   The keypad rules also exist as scoped styles in pages/List.vue. This global
+   copy is a deliberate second layer of defence: these controls are the main
+   way someone navigates a hymnal, and if the scoped block is ever lost in an
+   edit (which is how they were lost once already) the keypad would silently
+   collapse into one unreadable run of "123456789C0ok" instead of a usable
+   3-column grid with thumb-sized targets. Unscoped rules cannot be dropped by
+   a scoped-style refactor, so the finder degrades in appearance but never
+   becomes unusable. */
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 300px;
+  margin-top: 12px;
+}
+
+.keypad button,
+.keypad .keypad-key {
+  min-height: 48px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.45);
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text-primary, #1f2937);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.keypad button:active,
+.keypad .keypad-key:active {
+  background: rgba(127, 127, 127, 0.3);
+  transform: scale(0.95);
+}
+
+.keypad button:focus-visible,
+.keypad .keypad-key:focus-visible {
+  outline: 2px solid var(--primary-color, #4f7cff);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .keypad { max-width: none; }
+}
+
+/* ========================================
    Selection Styling
    ======================================== */
 

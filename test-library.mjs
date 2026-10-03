@@ -733,5 +733,19 @@ const assetCache = (assetRule?.headers || [])
 ok('hashed assets are cached immutably', /immutable/.test(assetCache), assetCache)
 ok('the SPA rewrite is preserved', Array.isArray(host.rewrites) && host.rewrites.length > 0)
 
+// The keypad rules must ALSO exist unscoped in style.css. The scoped block in
+// List.vue was lost once already and the finder silently collapsed into a
+// single run of "123456789C0ok". A global copy cannot be dropped by a
+// scoped-style refactor, so assert both layers survive.
+const globalCss = read('./src/style.css')
+ok('the keypad grid is also defined globally (not only scoped)',
+  /\.keypad \{[\s\S]*?display: grid[\s\S]*?repeat\(3/.test(globalCss))
+ok('global keypad keys keep a thumb-sized floor',
+  /\.keypad button[\s\S]*?min-height: 4[89]px/.test(globalCss))
+ok('the global keypad honours the theme tokens',
+  /var\(--text-primary/.test(globalCss))
+ok('no !important in the global keypad rules',
+  !/\.keypad[\s\S]{0,400}!important/.test(globalCss))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
