@@ -170,6 +170,8 @@ const user = ref(null)
 const navItems = [
   { title: 'Home', to: '/', icon: 'ðŸ ' },
   { title: 'List', to: '/list', icon: 'ðŸŽµ' },
+  { title: 'Listen', to: '/listen', icon: '🎧' },
+
   { title: 'Library', to: '/library', icon: 'ðŸ“š' },
   { title: 'Store', to: '/store', icon: 'ðŸ›ï¸' },
   { title: 'Events', to: '/events', icon: 'ðŸ“…' },

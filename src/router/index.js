@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../pages/Home.vue'
 import List from '../pages/List.vue'
+import Listen from '../pages/Listen.vue'
 import Library from '../pages/Library.vue'
 import Store from '../pages/Store.vue'
 import Events from '../pages/Events.vue'
@@ -24,6 +25,11 @@ const routes = [
     path: '/reader',
     name: 'ReaderRedirect',
     redirect: (to) => ({ name: 'List', query: to.query, hash: to.hash })
+  },
+  {
+    path: '/listen',
+    name: 'Listen',
+    component: Listen
   },
   {
     path: '/library',

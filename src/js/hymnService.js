@@ -292,6 +292,11 @@ export function normaliseCategory(category) {
   if (raw === 'hymn') return 'hymns'
   if (raw === 'new' || raw === 'newsongs') return 'newsong'
   if (raw === 'other' || raw === 'another') return 'others'
+  // The Chinese hymnal is exposed in the UI as one book called "hymnal", but
+  // the audio repo has no hymnal/ folder - its recordings live in hymns/.
+  // Mapping here means Chinese MP3/MIDI requests resolve to real files instead
+  // of 404ing on a folder that will never exist.
+  if (raw === 'hymnal') return 'hymns'
   return raw
 }
 

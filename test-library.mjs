@@ -124,7 +124,8 @@ ok('empty branch sets no error', /if \(!id\) \{[^}]*error\.value = ''/s.test(rd)
 
 /* ---- 4. live catalog from GitHub main ---- */
 console.log('\n--- 4. live catalog (GitHub main) ---')
-const { fetchCatalog, fetchHymn, CATEGORY_META } = await import('./src/js/hymnService.js')
+const { fetchCatalog, fetchHymn, CATEGORY_META, normaliseCategory, getAudioUrl } =
+  await import('./src/js/hymnService.js')
 
 eq('CATEGORY_META has 3 books', CATEGORY_META.length, 3)
 eq('first book label', CATEGORY_META[0].label, 'Hymns / Geet')
@@ -419,6 +420,39 @@ eq('the language survives', realRouter.currentRoute.value.query.language, 'chine
 await realRouter.push('/reader')
 eq('a bare /reader also lands on /list', realRouter.currentRoute.value.path, '/list')
 eq('and carries no stray id', realRouter.currentRoute.value.query.id, undefined)
+
+/* ---- 13. Listen tab: HTML5 audio, speed control, no Web Audio ---- */
+console.log('\n--- 13. Listen tab ---')
+const ls = read('./src/pages/Listen.vue')
+ok('is routed at /listen', /path: '\/listen'/.test(routes))
+ok('nav exposes it', nav.includes("to: '/listen'"))
+ok('uses a real <audio> element', /<audio[\s\S]{0,400}?<\/audio>/.test(ls))
+ok('binds the audio source', ls.includes(':src="audioSrc"'))
+ok('builds the url through the service', /getAudioUrl\(/.test(ls))
+// The directive for this phase is explicit: no Web Audio API, no PCM decoding.
+ok('does NOT use the Web Audio API',
+  !/AudioContext|webkitAudioContext|createBufferSource|decodeAudioData/.test(ls))
+ok('does NOT decode PCM itself', !/decodeAudioData|getChannelData|Float32Array/.test(ls))
+ok('does NOT pull in the MIDI engine', !/midiEngine|MidiEngine/.test(ls))
+// Speed must come from the native property, not a resampling hack.
+ok('speed uses the native playbackRate', /playbackRate\s*=/.test(ls))
+ok('speed slider exists', /type="range"[\s\S]{0,200}?min="0\.5"[\s\S]{0,200}?max="1\.5"/.test(ls))
+ok('speed is clamped to a sane range', /Math\.min\(1\.5, Math\.max\(0\.5/.test(ls))
+ok('speed survives starting a new track', /applySpeed\(el\)[\s\S]{0,60}?el\.play\(\)/.test(ls))
+ok('speed survives a mid-playback change', /watch\(speed, \(\) => applySpeed/.test(ls))
+// A missing recording must say so rather than spin forever.
+ok('a failed load reports itself', /function onError\(\)/.test(ls) && /No recording found/.test(ls))
+ok('play is only started from a click (autoplay rules)', /el\.play\(\)\.catch/.test(ls))
+ok('it stops audio on unmount', /onUnmounted[\s\S]{0,200}?stop\(\)/.test(ls))
+// The Chinese hymnal has no hymnal/ audio folder; it must map to hymns/.
+eq('chinese hymnal maps to the hymns audio folder',
+  normaliseCategory('hymnal'), 'hymns')
+ok('...so a Chinese mp3 resolves to a real file',
+  getAudioUrl('hymnal', '1', 'mp3').includes('/hymns/1.mp3'),
+  getAudioUrl('hymnal', '1', 'mp3'))
+ok('...and a Chinese midi resolves too',
+  getAudioUrl('hymnal', '1', 'midi').includes('/MIDI/hymns/1.mid'),
+  getAudioUrl('hymnal', '1', 'midi'))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
