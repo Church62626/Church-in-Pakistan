@@ -19,7 +19,7 @@ export const APPS_PATH = 'church-apps'
  * cannot change under a visitor mid-session. `APPS_REF` is the only thing to
  * bump when a new build is published.
  */
-export const APPS_REF = 'fe0da0390ecf8ca1194b399d19bd5afd72459c8c'
+export const APPS_REF = 'd8336450ac5fc2e0c864416fea864b89e97815cd'
 
 export const APPS_BROWSER_URL =
   `https://github.com/${APPS_REPO}/tree/${APPS_REF}/${APPS_PATH}`
@@ -393,93 +393,137 @@ export function removeBookmarkLocal(bookId) {
 /* ======================================================================
    LS Audio (Life-Study broadcasts)
 
-   Verified: `hymns-audio-/LS` contains exactly ONE file, `urdu-ls.txt`,
-   which is EMPTY (1 byte). There is no `life-study.json` and no
-   `life-study1.mp3` in that folder, on either the pinned commit or main.
+   Source: `hymns-audio-/LS` at commit 5ca9a2e, which now contains:
+     life-study.json          - the metadata for every message
+     philippians-msg-20.jpg   - a companion image asset
 
-   The screen is wired to that folder so it fills itself the moment the
-   broadcasts are uploaded. Until then it shows an honest empty state -
-   inventing message titles or speakers would be fabricating content.
+   ACTUAL schema of life-study.json (checked, not assumed):
+     { bookTitle, testament, language,
+       messages: [ { id, messageNumber, page, title, duration,
+                     youtubeUrl, imagePath } ] }
+
+   So messages come from the JSON, NOT from scanning for audio files: the
+   folder holds no .mp3 at all. Each message is played from its `youtubeUrl`
+   in an embedded player.
+
+   IMAGE PATH QUIRK (verified): the JSON's `imagePath` ("genesis-msg-01.jpg")
+   does NOT match a file in the folder ("philippians-msg-20.jpg"), and the
+   message is number 20. Rather than link a 404, `resolveImage` prefers an
+   asset whose name contains the message number and only falls back to
+   `imagePath` when nothing matches - so the Read button works today and keeps
+   working if the data is later corrected.
    ====================================================================== */
 
-export const LS_REF = 'f5c472a8a083ddbf0f848e596e6d2cb21c43ea7e'
+export const LS_REF = '5ca9a2e0be130e5cfec15ef33ec80817bf2314b4'
 
 const LS_API =
   `https://api.github.com/repos/Church62626/hymns-audio-/contents/LS?ref=${LS_REF}`
 
-/** Message number from a file name: `life-study12.mp3` -> 12 */
-function lsNumber(file) {
-  const m = String(file).match(/(\d+)(?=\.[a-z0-9]+$)/i)
+const LS_RAW_BASE =
+  `https://raw.githubusercontent.com/Church62626/hymns-audio-/${LS_REF}/LS`
+
+/** Message number from a file name: `philippians-msg-20.jpg` -> 20 */
+function numberFromName(file) {
+  const m = String(file).match(/msg[-_]?(\d+)/i)
   return m ? Number(m[1]) : null
 }
 
 /**
- * List the Life-Study broadcasts, pairing each audio file with its entry in
- * `life-study.json` when that metadata file exists.
+ * Resolve a message's companion image.
  *
- * Resolves to `{ episodes, metaFound, problem }` and never throws.
+ * The published `imagePath` is currently wrong, so an asset matching the
+ * message number wins. Returns '' when nothing matches, which the UI shows as
+ * "no image" rather than a broken image icon.
+ */
+function resolveImage(rawPath, messageNumber, assets) {
+  // `assets` is a list of file NAMES, so match on the entry itself. Reading
+  // `a.name` here silently yielded undefined and no image ever resolved.
+  const byNumber = assets.find((name) => numberFromName(name) === messageNumber)
+  if (byNumber) return byNumber
+  if (rawPath && assets.includes(rawPath)) return rawPath
+  return ''
+}
+
+/** Turn a YouTube watch/share URL into an embeddable one. '' if unusable. */
+export function youtubeEmbedUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  // watch?v=ID
+  let m = raw.match(/[?&]v=([A-Za-z0-9_-]{6,})/)
+  if (m) return `https://www.youtube.com/embed/${m[1]}`
+  // youtu.be/ID or /embed/ID or /shorts/ID
+  m = raw.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/) ||
+      raw.match(/\/(?:embed|shorts|v)\/([A-Za-z0-9_-]{6,})/)
+  if (m) return `https://www.youtube.com/embed/${m[1]}`
+  return ''
+}
+
+/**
+ * List the Life-Study messages with their companion image.
+ *
+ * Resolves to `{ episodes, book, problem }` and never throws. `problem` is one
+ * of 'unavailable' | 'not-found' | 'empty' | 'unknown'.
  */
 export async function fetchLsAudio() {
   let entries
   try {
     const res = await fetch(LS_API, { headers: { Accept: 'application/vnd.github+json' } })
-    if (res.status === 404) return { episodes: [], metaFound: false, problem: 'not-found' }
-    if (!res.ok) return { episodes: [], metaFound: false, problem: 'unavailable' }
+    if (res.status === 404) return { episodes: [], book: null, problem: 'not-found' }
+    if (!res.ok) return { episodes: [], book: null, problem: 'unavailable' }
     entries = await res.json()
   } catch {
-    return { episodes: [], metaFound: false, problem: 'unavailable' }
+    return { episodes: [], book: null, problem: 'unavailable' }
   }
-  if (!Array.isArray(entries)) return { episodes: [], metaFound: false, problem: 'unknown' }
+  if (!Array.isArray(entries)) return { episodes: [], book: null, problem: 'unknown' }
 
   const files = entries.filter((e) => e && e.type === 'file')
+  const assets = files
+    .filter((e) => /\.(jpe?g|png|webp)$/i.test(e.name || ''))
+    .map((e) => e.name)
 
-  // Metadata is optional: the broadcasts are still playable and are listed by
-  // file name when `life-study.json` has not been published.
-  let meta = null
   const metaFile = files.find((e) => /life[-_]?study\.json$/i.test(e.name || ''))
-  if (metaFile?.download_url) {
-    try {
-      const res = await fetch(metaFile.download_url)
-      const text = (await res.text()).trim()
-      if (text) {
-        const parsed = JSON.parse(text)
-        meta = Array.isArray(parsed)
-          ? parsed
-          : Array.isArray(parsed?.messages)
-            ? parsed.messages
-            : Array.isArray(parsed?.episodes)
-              ? parsed.episodes
-              : null
-      }
-    } catch {
-      meta = null
-    }
+  if (!metaFile?.download_url) {
+    return { episodes: [], book: null, problem: 'empty' }
   }
 
-  const audio = files.filter((e) => /\.(mp3|m4a|ogg|wav)$/i.test(e.name || ''))
+  let data
+  try {
+    const text = (await (await fetch(metaFile.download_url)).text()).trim()
+    if (!text) return { episodes: [], book: null, problem: 'empty' }
+    data = JSON.parse(text)
+  } catch {
+    return { episodes: [], book: null, problem: 'unknown' }
+  }
 
-  const episodes = audio
-    .map((e) => {
-      const no = lsNumber(e.name)
-      const entry = Array.isArray(meta)
-        ? meta.find((m) => Number(m.number ?? m.no ?? m.message) === no) || null
-        : null
+  const list = Array.isArray(data) ? data : (Array.isArray(data?.messages) ? data.messages : [])
+  const book = {
+    title: data?.bookTitle || 'Life-Study',
+    testament: data?.testament || '',
+    language: data?.language || 'english'
+  }
+
+  const episodes = list
+    .map((m) => {
+      const no = Number(m?.messageNumber ?? m?.number ?? m?.id)
+      const image = resolveImage(m?.imagePath, Number.isFinite(no) ? no : null, assets)
       return {
-        id: e.name,
-        number: no,
-        file: e.name,
-        title: entry?.title || `Life-Study ${no ?? e.name}`,
-        speaker: entry?.speaker || '',
-        description: entry?.description || entry?.notes || '',
-        date: entry?.date || '',
-        audioUrl: e.download_url || '',
-        size: Number(e.size) || 0
+        id: String(m?.id ?? no ?? Math.random()),
+        number: Number.isFinite(no) ? no : null,
+        title: m?.title || (Number.isFinite(no) ? `Message ${no}` : 'Untitled message'),
+        duration: m?.duration || '',
+        page: m?.page ?? null,
+        // The embed URL is precomputed and validated here; an unusable link
+        // never reaches the template, so no iframe with a broken src is built.
+        embedUrl: youtubeEmbedUrl(m?.youtubeUrl),
+        youtubeUrl: m?.youtubeUrl || '',
+        imageName: image,
+        imageUrl: image ? `${LS_RAW_BASE}/${encodeURI(image)}` : ''
       }
     })
     .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
 
-  if (!episodes.length) return { episodes: [], metaFound: Boolean(meta), problem: 'empty' }
-  return { episodes, metaFound: Boolean(meta), problem: '' }
+  if (!episodes.length) return { episodes: [], book, problem: 'empty' }
+  return { episodes, book, problem: '' }
 }
 
 

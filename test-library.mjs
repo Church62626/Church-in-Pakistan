@@ -1108,12 +1108,26 @@ ok('e-books read the Church-Books folder',
 ok('the PDF renders in-app, not only as a download link',
   /<object[\s\S]{0,140}application\/pdf/.test(ebooksPage))
 ok('the PDF has a fallback link', /reader-fallback/.test(ebooksPage))
-ok('LS audio pairs metadata with each episode',
-  /life-study\.json/i.test(svcAll) && /speaker/.test(lsPage))
-ok('only one LS audio element is mounted at a time',
-  /current && current\.id === ep\.id/.test(lsPage))
-ok('switching LS episodes stops the previous one',
-  /if \(playerEl\.value\) playerEl\.value\.pause\(\)/.test(lsPage))
+// LS Audio now plays from `life-study.json` via an embedded YouTube player.
+// The messages live in the JSON, not in the folder as audio files.
+ok('LS reads messages from life-study.json',
+  /life-study\.json/i.test(svcAll) && /data\?\.messages/.test(svcAll))
+ok('a YouTube watch url becomes an embed url',
+  svcAll.includes('youtubeEmbedUrl') || /youtube\.com\/embed/.test(svcAll))
+// The published imagePath does not match any file, so the resolver must prefer
+// an asset matching the message number rather than link a guaranteed 404.
+ok('image resolution prefers the message number over a stale imagePath',
+  /function resolveImage/.test(svcAll) && /numberFromName\(name\) === messageNumber/.test(svcAll))
+ok('the LS page embeds a video in an iframe',
+  /<iframe/.test(lsPage) && /ep\.embedUrl/.test(lsPage))
+ok('...only for the selected message',
+  /playingId === ep\.id && ep\.embedUrl/.test(lsPage))
+ok('the Read button opens the companion image',
+  /v-if="ep\.imageUrl"/.test(lsPage) && /reading = ep/.test(lsPage) && /reader-img/.test(lsPage))
+ok('Escape closes the image viewer',
+  /Escape/.test(lsPage) && /reading\.value = null/.test(lsPage))
+ok('the LS ref points at the commit that has the data',
+  /LS_REF = '5ca9a2e0be130e5cfec15ef33ec80817bf2314b4'/.test(svcAll))
 
 // The sticky toolbar must clear the fixed navbar, not slide under it.
 ok('the reader toolbar is sticky below the navbar',
