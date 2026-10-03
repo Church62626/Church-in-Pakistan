@@ -7,6 +7,9 @@ import Store from '../pages/Store.vue'
 import Events from '../pages/Events.vue'
 import About from '../pages/About.vue'
 import Apps from '../pages/Apps.vue'
+import Quiz from '../pages/Quiz.vue'
+import Ebooks from '../pages/Ebooks.vue'
+import LsAudio from '../pages/LsAudio.vue'
 
 const routes = [
   {
@@ -51,6 +54,21 @@ const routes = [
     path: '/apps',
     name: 'Apps',
     component: Apps
+  },
+  {
+    path: '/quiz',
+    name: 'Quiz',
+    component: Quiz
+  },
+  {
+    path: '/ebooks',
+    name: 'Ebooks',
+    component: Ebooks
+  },
+  {
+    path: '/ls-audio',
+    name: 'LsAudio',
+    component: LsAudio
   },
   {
     path: '/about',

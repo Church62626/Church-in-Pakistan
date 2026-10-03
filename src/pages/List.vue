@@ -338,13 +338,42 @@
         :dir="textDir"
         :style="readerStyle"
       >
-        <p v-for="(stanza, index) in hymn.verses" :key="`verse-${index}`" class="stanza">
-          {{ stanza }}
-        </p>
-        <p v-if="hymn.chorus" class="stanza stanza-chorus">
-          <span class="chorus-label">Chorus</span>
-          {{ hymn.chorus }}
-        </p>
+        <!-- One ordered pass over the pre-computed layout, so a chorus lands
+             after every stanza instead of once at the end. Falls back to the raw
+             verses for a hymn that predates the layout field. -->
+        <template v-if="hymnBlocks.length">
+          <section
+            v-for="(block, i) in hymnBlocks"
+            :key="`block-${i}`"
+            class="hymn-block"
+            :class="block.kind === 'chorus' ? 'hymn-block-chorus' : 'hymn-block-stanza'"
+          >
+            <!-- Stanzas are numbered so someone reading along can point at the
+                 right one; the number is decorative and hidden from readers of
+                 the screen. -->
+            <p v-if="block.kind === 'stanza'" class="stanza-no" aria-hidden="true">
+              {{ block.number }}
+            </p>
+
+            <p v-if="block.kind === 'chorus'" class="chorus-label" :lang="chorusLabelLang">
+              {{ chorusLabel }}
+            </p>
+
+            <p class="stanza">
+              {{ block.lines.join('\n') }}
+            </p>
+          </section>
+        </template>
+
+        <template v-else>
+          <p v-for="(stanza, index) in hymn.verses" :key="`verse-${index}`" class="stanza">
+            {{ stanza }}
+          </p>
+          <p v-if="hymn.chorus" class="stanza stanza-chorus">{{ hymn.chorus }}</p>
+        </template>
+
+        <!-- Author/editor notes travel with some hymn files. -->
+        <p v-if="hymn.note" class="hymn-note">{{ hymn.note }}</p>
       </main>
 
       <p v-else class="reader-status">No hymn selected - choose one from the Library.</p>
@@ -372,6 +401,7 @@ import {
   getActiveLanguage,
   hymnErrorMessage,
   isHymnMissing,
+  chorusLabel as chorusLabelFor,
   onLanguageChange as subscribeLanguage
 } from '../js/hymnService'
 
@@ -431,6 +461,20 @@ const recoverTitle = computed(() =>
 
 /** Tracked separately from `error` so the panel can distinguish the two. */
 const hymnMissing = ref(false)
+
+/**
+ * Ordered stanza/chorus blocks. The service pre-computes this so the chorus
+ * follows every stanza; `normalizeHymn` guarantees it is always present for a
+ * remote hymn, and the empty case falls back to the raw verses.
+ */
+const hymnBlocks = computed(() => hymn.value?.layout || [])
+
+/** "Chorus", or the Urdu word for a refrain in an Urdu hymn. */
+const chorusLabel = computed(() => chorusLabelFor(language.value))
+
+/** The label word itself is never RTL-forced: it follows the hymn's script,
+ *  so `lang="ur"` is set on it and the surrounding text direction is inherited. */
+const chorusLabelLang = computed(() => (language.value === 'urdu' ? 'ur' : 'en'))
 
 /** True only when the route actually carries a hymn id (e.g. /list?id=12). */
 const hasId = computed(() => Boolean(requestedId.value.trim()))
@@ -1357,7 +1401,76 @@ onBeforeUnmount(() => {
 }
 
 /* ---- Toolbar ---- */
+/* Sticky below the fixed top navbar.
+   The navbar is `position: fixed` at 64px tall, so a sticky toolbar must offset
+   by exactly that height or it disappears underneath it. `top: var(--nav-h)`
+   shares the one source of truth for that height, and the z-index sits below
+   the navbar's (1000) so the navbar always wins the overlap on scroll. */
+/* ---- stanza / chorus blocks ---------------------------------------- */
+.hymn-block {
+  position: relative;
+  margin-bottom: 22px;
+  padding-left: 34px;
+}
+
+/* The chorus is visually set apart so a singer can find it instantly while
+   reading: indented, with a rule down the side and a soft tint. It uses the
+   theme surface rather than a colour so it survives dark mode. */
+.hymn-block-chorus {
+  margin: 26px 0;
+  padding: 14px 16px 14px 34px;
+  border-left: 3px solid var(--primary-color, #4f7cff);
+  border-radius: 0 10px 10px 0;
+  background: var(--primary-bg, rgba(79, 70, 229, 0.08));
+}
+
+.hymn-block-chorus .stanza { margin: 0; font-style: italic; }
+
+.stanza-no {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 24px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  /* The number must not inherit the RTL flip in a way that pushes it to the
+     wrong edge of the stanza; it is a marker, not lyric text. */
+  direction: ltr;
+}
+
+.chorus-label {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary-color, #4f7cff);
+  /* Follows the hymn's own script, so an Urdu label is not forced to LTR. */
+  direction: inherit;
+}
+
+.hymn-note {
+  margin-top: 26px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+@media (max-width: 480px) {
+  .hymn-block { padding-left: 26px; }
+  .stanza-no { width: 18px; font-size: 0.64rem; }
+  .hymn-block-chorus { padding-left: 26px; }
+}
+
 .reader-toolbar {
+  position: sticky;
+  top: calc(var(--nav-h, 64px) + 8px);
+  z-index: 900;
   display: flex;
   align-items: center;
   justify-content: space-between;

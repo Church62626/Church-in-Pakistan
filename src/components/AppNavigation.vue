@@ -39,6 +39,10 @@
           </button>
 
           <transition name="products-drop">
+            <!-- Every entry is an in-app screen. A raw github.com link is
+                 deliberately absent: sending a visitor out to a repository is a
+                 dead end next to a working page, and the repo is an
+                 implementation detail, not something to show a congregation. -->
             <div v-if="productsOpen" class="products-menu" role="menu">
               <router-link to="/apps" class="products-item" role="menuitem" @click="closeProducts">
                 <span class="products-icon" aria-hidden="true">📱</span>
@@ -47,20 +51,27 @@
                   <span class="products-text">Download the hymnal app</span>
                 </span>
               </router-link>
-              <a
-                class="products-item"
-                role="menuitem"
-                :href="APPS_BROWSER_URL"
-                target="_blank"
-                rel="noopener noreferrer"
-                @click="closeProducts"
-              >
-                <span class="products-icon" aria-hidden="true">📂</span>
+              <router-link to="/ebooks" class="products-item" role="menuitem" @click="closeProducts">
+                <span class="products-icon" aria-hidden="true">📚</span>
                 <span class="products-body">
-                  <span class="products-title">Apps folder</span>
-                  <span class="products-text">Browse the builds on GitHub</span>
+                  <span class="products-title">E-Books</span>
+                  <span class="products-text">Read books online</span>
                 </span>
-              </a>
+              </router-link>
+              <router-link to="/ls-audio" class="products-item" role="menuitem" @click="closeProducts">
+                <span class="products-icon" aria-hidden="true">🎙️</span>
+                <span class="products-body">
+                  <span class="products-title">LS Audio</span>
+                  <span class="products-text">Life-Study messages</span>
+                </span>
+              </router-link>
+              <router-link to="/quiz" class="products-item" role="menuitem" @click="closeProducts">
+                <span class="products-icon" aria-hidden="true">📝</span>
+                <span class="products-body">
+                  <span class="products-title">Bible Quiz</span>
+                  <span class="products-text">Test your knowledge</span>
+                </span>
+              </router-link>
             </div>
           </transition>
         </div>
@@ -204,7 +215,6 @@ import {
   resolveInitialLanguage as initialLanguage
 } from '../js/hymnService.js'
 import logoImage from '../assets/logo.png'
-import { APPS_BROWSER_URL } from '../js/appsService.js'
 
 const FEEDBACK_EMAIL = 'churchpakistan52@gmail.com'
 const LANG_STORAGE_KEY = 'cip.language'
@@ -438,7 +448,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  /* Shares --nav-h with the sticky reader toolbar on the List page, which must
+     offset by exactly this height to sit below the navbar. */
+  height: var(--nav-h, 64px);
 }
 
 .nav-links {

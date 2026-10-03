@@ -36,6 +36,29 @@
         </button>
       </div>
 
+      <!-- Section menu. Each destination is a real screen inside the app, so a
+           visitor is never sent out to a raw repository URL. -->
+      <nav class="lib-menu" aria-label="Library sections">
+        <router-link to="/list" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">📖</span> Hymns / Geet
+        </router-link>
+        <router-link to="/listen" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">🎧</span> Listen
+        </router-link>
+        <router-link to="/ebooks" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">📚</span> E-Books
+        </router-link>
+        <router-link to="/ls-audio" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">🎙️</span> LS Audio
+        </router-link>
+        <router-link to="/quiz" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">📝</span> Bible Quiz
+        </router-link>
+        <router-link to="/apps" class="lib-menu-link" active-class="active">
+          <span class="lib-menu-icon" aria-hidden="true">📦</span> Apps
+        </router-link>
+      </nav>
+
       <p v-if="loading" class="library-status">Loading books...</p>
       <p v-else-if="error" class="library-status library-status-error">{{ error }}</p>
 
@@ -596,6 +619,44 @@ onMounted(() => loadCatalog(language.value))
 }
 
 /* Status messages */
+/* ---- library section menu ------------------------------------------ */
+.lib-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 22px;
+}
+
+.lib-menu-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 9px 16px;
+  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.lib-menu-link:hover { background: rgba(127, 127, 127, 0.16); }
+
+.lib-menu-link.active {
+  background: rgba(79, 124, 255, 0.18);
+  border-color: var(--primary-color, #4f7cff);
+}
+
+.lib-menu-link:focus-visible {
+  outline: 2px solid var(--primary-color, #4f7cff);
+  outline-offset: 2px;
+}
+
+.lib-menu-icon { font-size: 1.05rem; line-height: 1; }
+
 .library-status {
   padding: 40px 0;
   text-align: center;

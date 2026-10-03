@@ -3,6 +3,13 @@
    ======================================== */
 
 :root {
+  /* Height of the fixed top navigation bar.
+     Single source of truth: the navbar itself uses it for its own height, and
+     any sticky element that must sit *below* the navbar (the List page reader
+     toolbar) offsets by it. Hard-coding 64px in two places is how a sticky bar
+     ends up sliding under the navbar after one of them changes. */
+  --nav-h: 64px;
+
   /* Primary Brand Colors */
   --primary: #4F46E5;
   --primary-light: #6366F1;

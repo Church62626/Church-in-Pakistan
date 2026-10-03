@@ -390,6 +390,8 @@ export function findHymn(data, id) {
 export function normalizeHymn(raw, id, meta = {}) {
   const verses = toStanzas(raw.stanzas ?? raw.verses ?? raw.content ?? raw.lyrics ?? raw.body ?? raw.lines)
   const title = toText(raw.title ?? raw.name ?? raw.heading)
+  const chorusLines = toStanzas(raw.chorus ?? raw.refrain)
+  const duo = parseDuo(raw.duo)
 
   return {
     id: raw.id ?? raw.number ?? id,
@@ -397,11 +399,17 @@ export function normalizeHymn(raw, id, meta = {}) {
     category: raw.category ?? raw.cat ?? meta.category ?? '',
     title: title || `Hymn ${id}`,
     titleLines: title ? title.split(/\r?\n/) : [`Hymn ${id}`],
-    chorus: toStanzas(raw.chorus ?? raw.refrain).join('\n'),
+    chorus: chorusLines.join('\n'),
+    chorusLines,
     verses,
+    // Pre-computed display order so the Reader never has to reason about where a
+    // chorus belongs. See buildHymnLayout for the schema this encodes.
+    layout: buildHymnLayout(verses, chorusLines, duo),
+    duo,
     language: meta.language || '',
     source: meta.source || 'remote',
     sourceUrl: meta.url || '',
+    note: toText(raw.note),
     // Chinese hymnal extras. Harmless (empty) for every other language, so the
     // Reader can show them only when they are actually populated.
     zhNo: raw.zh_no ?? null,
@@ -414,6 +422,106 @@ export function normalizeHymn(raw, id, meta = {}) {
     enId: raw.en_id ?? null,
     enTitle: toText(raw.en_title)
   }
+}
+
+/* ---------------------------------------------------------------------- *
+ * Stanza / chorus layout
+ *
+ * Verified against the published lyric files (437 English + 437 Urdu hymns,
+ * plus newsongs and others):
+ *
+ *   content : string[][]  - one inner array per stanza
+ *   chorus  : string[]    - the refrain, given once for the whole hymn
+ *   duo     : "duo"       - ALWAYS the literal string "duo", never a number or
+ *                          an index. Verified across every published file.
+ *
+ * So `duo` is a *flag*, not a position: it marks the hymn as having a second
+ * chorus. That second chorus is not a separate field - the same `chorus`
+ * array is sung again after the final stanza. Placing it "after the stanza
+ * duo names" is therefore not something the data can express, and guessing an
+ * index would put the chorus in a different place on every hymn.
+ *
+ * The layout is therefore the standard hymnal one:
+ *   stanza 1 -> chorus -> stanza 2 -> chorus -> ... -> stanza N -> chorus
+ * with the final chorus included, which is what `duo` (a repeated chorus)
+ * describes. Stanzas with no chorus render on their own.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Normalise the `duo` field.
+ *
+ * Tolerates the shapes a hand-edited file might carry - the literal string,
+ * a boolean, a number (treated as a position if someone adds one later), or an
+ * object with an `after`/`index` field. Returns
+ * `{ hasDuo: boolean, after: number | null }`.
+ */
+export function parseDuo(value) {
+  if (value == null || value === false || value === '') return { hasDuo: false, after: null }
+
+  // The real data: the literal string "duo".
+  if (value === true || value === 'duo' || value === 'DUO') return { hasDuo: true, after: null }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { hasDuo: true, after: Math.max(0, Math.trunc(value)) }
+  }
+
+  if (typeof value === 'object') {
+    const after = value.after ?? value.index ?? value.at ?? value.after_stanza ?? null
+    // `Number(null)` and `Number('')` are both 0, so a missing position would
+    // silently become "chorus after stanza 1" - wrong for every hymn. Only a
+    // real, finite number counts as a position.
+    const isReal = after !== null && after !== '' && Number.isFinite(Number(after))
+    return { hasDuo: true, after: isReal ? Math.max(0, Math.trunc(Number(after))) : null }
+  }
+
+  // Any other non-empty string means "this hymn has a repeated chorus".
+  return { hasDuo: true, after: null }
+}
+
+/**
+ * The word to label a chorus with, per language.
+ *
+ * `وردہ` ("varda") is the Urdu hymnals' own word for a refrain; using the
+ * English "Chorus" inside an Urdu hymn would be the wrong script entirely.
+ */
+const CHORUS_LABEL = {
+  urdu: 'وردہ' // varda - a refrain
+}
+
+/**
+ * The chorus label for a language: "Chorus" by default, and the Urdu word for
+ * Urdu hymns. Falls back to the literal key so an unknown language still gets
+ * something readable rather than an empty heading.
+ */
+export function chorusLabel(language) {
+  if (language === 'urdu') return CHORUS_LABEL.urdu
+  return 'Chorus'
+}
+
+/**
+ * Build the ordered blocks the Reader renders.
+ *
+ * Returns `[{ kind: 'stanza'|'chorus', number?, lines }]`, with stanzas
+ * numbered from 1 and a chorus inserted after every stanza. A trailing chorus
+ * is included, so a hymn whose last stanza would otherwise have no refrain
+ * still ends on one.
+ */
+export function buildHymnLayout(verses, chorusLines, duo = { hasDuo: false, after: null }) {
+  const blocks = []
+  const chorus = Array.isArray(chorusLines) ? chorusLines.filter((l) => String(l || '').trim()) : []
+  const hasChorus = chorus.length > 0
+
+  verses.forEach((lines, i) => {
+    blocks.push({ kind: 'stanza', number: i + 1, lines })
+    if (!hasChorus) return
+
+    // An explicit position (only present if a future file supplies one) wins;
+    // otherwise the chorus follows every stanza, which is the hymnal norm.
+    const after = duo?.after != null ? duo.after : i
+    if (i === after) blocks.push({ kind: 'chorus', lines: chorus })
+  })
+
+  return blocks
 }
 
 /* ------------------------------------------------------------------ *

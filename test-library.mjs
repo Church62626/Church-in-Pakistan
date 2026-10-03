@@ -125,7 +125,8 @@ ok('empty branch sets no error', /if \(!id\) \{[^}]*error\.value = ''/s.test(rd)
 /* ---- 4. live catalog from GitHub main ---- */
 console.log('\n--- 4. live catalog (GitHub main) ---')
 const { fetchCatalog, fetchHymn, CATEGORY_META, normaliseCategory, getAudioUrl,
-  hymnErrorMessage, isHymnMissing } =
+  hymnErrorMessage, isHymnMissing, parseDuo, chorusLabel, buildHymnLayout,
+  normalizeHymn } =
   await import('./src/js/hymnService.js')
 
 eq('CATEGORY_META has 3 books', CATEGORY_META.length, 3)
@@ -970,6 +971,157 @@ ok('the recovery panel is neutral, not red',
   /\.recover-title \{[\s\S]{0,220}?color: var\(--text-primary\)/.test(
     read('./src/pages/List.vue')) &&
   !/\.reader-recover[\s\S]{0,200}color: #ef4444/.test(read('./src/pages/List.vue')))
+
+console.log(`\n--- 25. missing-hymn snackbar + recovery ---`)
+// The regression: `error.value = err.message` put a diagnostic string - naming
+// every URL that was tried - straight into a red block on the page.
+ok('the raw error message is never assigned to the UI',
+  !/error\.value = err\.message/.test(rd))
+ok('the UI uses the visitor-facing mapper', /error\.value = hymnErrorMessage\(err\)/.test(rd))
+ok('a missing hymn raises the snackbar', /showToast\(`Hymn \$\{id\} was not found/.test(rd))
+ok('...naming the category it was not found in',
+  /was not found in \$\{categoryLabel\.value\}/.test(rd))
+ok('a missing hymn does not also set a red error line',
+  /hymnMissing\.value = isHymnMissing\(err\)[\s\S]{0,220}error\.value = ''/.test(rd))
+// The diagnostic stays available to developers at warn level: the visitor did
+// nothing wrong, and this must not read as an unhandled failure.
+ok('the diagnostic still reaches the console, at warn level',
+  /console\.warn\(`list: hymn/.test(rd))
+ok('a recovery panel is rendered when no hymn is shown',
+  /v-else-if="!hymn && hasId" class="reader-recover/.test(rd))
+ok('the panel offers a way back to the library',
+  /to="\/library" class="recover-btn"/.test(rd))
+ok('...and a way to change the number',
+  /to="\/list" class="recover-btn recover-btn-ghost"/.test(rd))
+ok('a successful load clears the failure state',
+  /hymn\.value = result[\s\S]{0,220}hymnMissing\.value = false/.test(rd))
+
+console.log('\n--- 26. stanza numbering + chorus flow (verified against real data) ---')
+// Across every published lyric file `duo` is ALWAYS the literal string "duo" -
+// a flag meaning "this hymn has a repeated chorus", never an index saying where
+// the second chorus goes.
+eq('duo:"duo" is a flag, not a position', JSON.stringify(parseDuo('duo')),
+  JSON.stringify({ hasDuo: true, after: null }))
+eq('a missing duo is simply false', JSON.stringify(parseDuo(undefined)),
+  JSON.stringify({ hasDuo: false, after: null }))
+eq('duo:true also counts', parseDuo(true).hasDuo, true)
+eq('duo:false does not', parseDuo(false).hasDuo, false)
+eq('a numeric duo is kept as a position', parseDuo(2).after, 2)
+eq('an object duo reads its position', parseDuo({ after: 1 }).after, 1)
+// `Number(null)` is 0, so an absent position must not become "after stanza 1".
+eq('an object with no position stays null', parseDuo({}).after, null)
+eq('an empty-string position stays null', parseDuo({ after: '' }).after, null)
+
+eq('chorus label is "Chorus" in English', chorusLabel('english'), 'Chorus')
+eq('chorus label is the Urdu word for an Urdu hymn', chorusLabel('urdu'), 'وردہ')
+ok('the Urdu chorus label is Arabic script, not transliterated',
+  /[\u0600-\u06FF]/.test(chorusLabel('urdu')), chorusLabel('urdu'))
+
+const layout = buildHymnLayout([['a1'], ['a2'], ['a3']], ['chorus line'])
+eq('a 3-stanza hymn yields 6 blocks', layout.length, 6)
+eq('stanza and chorus alternate',
+  layout.map((b) => b.kind).join(','),
+  'stanza,chorus,stanza,chorus,stanza,chorus')
+eq('stanzas are numbered from 1',
+  layout.filter((b) => b.kind === 'stanza').map((b) => b.number).join(','), '1,2,3')
+ok('the chorus follows every stanza, not just the last',
+  layout[1].kind === 'chorus' && layout[3].kind === 'chorus')
+ok('a hymn with no chorus yields only its stanzas',
+  buildHymnLayout([['a1'], ['a2']], []).length === 2)
+ok('a blank chorus array is treated as no chorus',
+  buildHymnLayout([['a1']], ['', '  ']).length === 1)
+
+// End-to-end against the real shape of a published `duo` hymn.
+const realHymn = normalizeHymn({
+  id: '110',
+  title: ["Life's too short"],
+  duo: 'duo',
+  chorus: ['In the midst of time,', 'The kingdom is mine'],
+  content: [['Too short'], ['To waste'], ['Time is quickly']]
+}, '110', { language: 'english', category: 'newsong' })
+ok('normalizeHymn produces a layout', realHymn.layout.length === 6)
+eq('a duo hymn repeats the chorus after each stanza',
+  realHymn.layout.filter((b) => b.kind === 'chorus').length, 3)
+ok('the legacy `chorus` string field is preserved for other callers',
+  typeof realHymn.chorus === 'string' && realHymn.chorus.includes('kingdom'))
+ok('the Reader renders the layout, not a single trailing chorus',
+  /v-for="\(block, i\) in hymnBlocks"/.test(rd) && /hymn-block-chorus/.test(rd))
+
+console.log('\n--- 27. new library modules + no raw repository links ---')
+const apps = await import('./src/js/appsService.js')
+const quizPage = read('./src/pages/Quiz.vue')
+const ebooksPage = read('./src/pages/Ebooks.vue')
+const lsPage = read('./src/pages/LsAudio.vue')
+const routesAll = read('./src/router/index.js')
+const navAll = read('./src/components/AppNavigation.vue')
+const libAll = read('./src/pages/Library.vue')
+const svcAll = read('./src/js/appsService.js')
+
+ok('/quiz is routed', /path: '\/quiz'/.test(routesAll))
+ok('/ebooks is routed', /path: '\/ebooks'/.test(routesAll))
+ok('/ls-audio is routed', /path: '\/ls-audio'/.test(routesAll))
+ok('the Library links to every section',
+  libAll.includes('to="/ebooks"') && libAll.includes('to="/ls-audio"') &&
+  libAll.includes('to="/quiz"'))
+
+// Never send a visitor out to a raw repository URL when the app has its own
+// screen for it: the repo is an implementation detail, not a destination.
+ok('no raw repository link in the nav', !/:href="APPS_BROWSER_URL"/.test(navAll))
+ok('no raw github.com link in any page template',
+  ![quizPage, ebooksPage, lsPage].some((t) => /github\.com/.test(t)))
+ok('the Products menu offers the new screens',
+  /to="\/ebooks"/.test(navAll) && /to="\/ls-audio"/.test(navAll) && /to="\/quiz"/.test(navAll))
+
+// Quiz: both testaments, three languages, validated answer indices.
+eq('two testaments', apps.TESTAMENTS.join(','), 'Old Testament,New Testament')
+eq('three quiz languages', apps.QUIZ_LANGUAGES.join(','), 'english,urdu,chinese')
+// An answer index pointing past the options would be an unanswerable question.
+ok('an out-of-range answer index is rejected',
+  apps.normaliseQuestion({ question: 'q', options: ['a', 'b'], correctAnswerIndex: 5 }) === null)
+ok('a question with too few options is rejected',
+  apps.normaliseQuestion({ question: 'q', options: ['a'], correctAnswerIndex: 0 }) === null)
+ok('a blank question is rejected',
+  apps.normaliseQuestion({ question: '  ', options: ['a', 'b'], correctAnswerIndex: 0 }) === null)
+ok('a valid question is kept with its answer index',
+  (() => {
+    const q = apps.normaliseQuestion({
+      question: 'Who?', options: ['a', 'b', 'c', 'd'],
+      correctAnswerIndex: 2, testament: 'New Testament', language: 'urdu'
+    })
+    return q && q.correctAnswerIndex === 2 && q.testament === 'New Testament' &&
+      q.language === 'urdu'
+  })())
+ok('the quiz locks the answer after one choice',
+  /if \(answered\.value \|\| !current\.value\) return/.test(quizPage) &&
+  /:disabled="answered"/.test(quizPage))
+ok('the quiz marks right and wrong answers',
+  /is-correct/.test(quizPage) && /is-wrong/.test(quizPage))
+ok('the quiz shows the explanation',
+  /quiz-explanation/.test(quizPage) && /current\.explanation/.test(quizPage))
+ok('the quiz tracks a score',
+  /score\.value \+= 1/.test(quizPage) && /Score \{\{ score \}/.test(quizPage))
+ok('empty quiz and failed load are different states',
+  /QUIZ_EMPTY_COPY\[problem\.value\]/.test(quizPage) && /v-else-if="problem"/.test(quizPage))
+
+ok('e-books read the Church-Books folder',
+  /fetchEBooks/.test(ebooksPage) && /Church-Books/.test(svcAll))
+ok('the PDF renders in-app, not only as a download link',
+  /<object[\s\S]{0,140}application\/pdf/.test(ebooksPage))
+ok('the PDF has a fallback link', /reader-fallback/.test(ebooksPage))
+ok('LS audio pairs metadata with each episode',
+  /life-study\.json/i.test(svcAll) && /speaker/.test(lsPage))
+ok('only one LS audio element is mounted at a time',
+  /current && current\.id === ep\.id/.test(lsPage))
+ok('switching LS episodes stops the previous one',
+  /if \(playerEl\.value\) playerEl\.value\.pause\(\)/.test(lsPage))
+
+// The sticky toolbar must clear the fixed navbar, not slide under it.
+ok('the reader toolbar is sticky below the navbar',
+  /\.reader-toolbar \{[\s\S]{0,200}position: sticky[\s\S]{0,140}top: calc\(var\(--nav-h/.test(rd))
+ok('the nav height is one shared token',
+  /--nav-h: 64px/.test(read('./src/css/themes.css')) && /height: var\(--nav-h/.test(navAll))
+ok('the toolbar stacks under the navbar, not over it',
+  /\.reader-toolbar \{[\s\S]{0,220}z-index: 900/.test(rd))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
