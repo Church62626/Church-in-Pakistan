@@ -19,7 +19,7 @@ export const APPS_PATH = 'church-apps'
  * cannot change under a visitor mid-session. `APPS_REF` is the only thing to
  * bump when a new build is published.
  */
-export const APPS_REF = 'd8336450ac5fc2e0c864416fea864b89e97815cd'
+export const APPS_REF = '12c30250568ef447e5c37b1b12439f9f629a907e'
 
 export const APPS_BROWSER_URL =
   `https://github.com/${APPS_REPO}/tree/${APPS_REF}/${APPS_PATH}`
@@ -117,6 +117,152 @@ export function formatSize(bytes) {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/* ======================================================================
+   Apps manifest (apps.json)
+
+   `church-apps/apps.json` is the richer, hand-authored catalogue:
+
+     { apps: [ { id, appName, version, platform, description,
+                 fileSize, downloadUrl, iconPath } ] }
+
+   It carries the version, description and icon that a bare file listing
+   cannot. When present it is the source of truth; otherwise the service falls
+   back to listing the folder, so the Apps screen is never blank just because a
+   manifest has not been written yet.
+
+   IMPORTANT (verified): an entry may reference a file that is NOT in the
+   folder - `apps.json` lists `lifestudy-v2.0.1.apk` and
+   `icons/lifestudy-icon.png`, neither of which exists. Linking those blindly
+   gives visitors a dead Download button, so every entry is checked against the
+   real folder listing and `downloadOk` / `iconOk` report the result.
+   ====================================================================== */
+
+const APPS_MANIFEST_RAW =
+  `https://raw.githubusercontent.com/${APPS_REPO}/${APPS_REF}/church-apps/apps.json`
+
+/** Icons live under church-apps/ on GitHub's raw host. */
+const APPS_ICON_RAW =
+  `https://raw.githubusercontent.com/${APPS_REPO}/${APPS_REF}/church-apps/`
+
+/** True when the manifest's downloadUrl points at a file that actually exists. */
+function manifestFileExists(downloadUrl, filesInFolder) {
+  if (!downloadUrl) return false
+  // Compare the final path segment: the manifest may use an absolute raw URL,
+  // a blob URL, or a bare file name.
+  const tail = String(downloadUrl).split('/').pop().split('?')[0]
+  return filesInFolder.includes(tail)
+}
+
+/** File names present in church-apps/ and church-apps/icons/. Never throws. */
+async function listFolderFileNames() {
+  const names = new Set()
+  const add = async (url) => {
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } })
+      if (!res.ok) return
+      const entries = await res.json()
+      if (Array.isArray(entries)) {
+        for (const e of entries) if (e && e.type === 'file') names.add(e.name)
+      }
+    } catch {
+      // A failed listing just means fewer known files; never fatal.
+    }
+  }
+  await add(CONTENTS_API)
+  // Icons live in a subdirectory, so they are not in the top-level listing.
+  await add(`${CONTENTS_API.replace('/contents/church-apps?', '/contents/church-apps/icons?')}`)
+  return [...names]
+}
+
+/**
+ * Load the hand-authored manifest, or null when absent/unreadable.
+ * Never throws: a missing manifest is a normal state, not an error.
+ */
+export async function fetchAppsManifest() {
+  try {
+    const res = await fetch(APPS_MANIFEST_RAW)
+    if (!res.ok) return null
+    const text = (await res.text()).trim()
+    if (!text) return null
+    const parsed = JSON.parse(text)
+    const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.apps) ? parsed.apps : [])
+    return list.length ? list : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The apps to show, preferring the manifest.
+ *
+ * Each entry keeps everything the manifest gave plus `downloadOk`, so the UI
+ * can mark an app whose binary is missing instead of linking to a 404. APKs
+ * found as loose files and not claimed by the manifest are appended, so a newly
+ * dropped APK still shows up before someone writes a manifest entry for it.
+ */
+export async function fetchAppsRich() {
+  const [manifest, fileNames] = await Promise.all([fetchAppsManifest(), listFolderFileNames()])
+  const apks = fileNames.filter((n) => /\.apk$/i.test(n) && !NON_APP_FILES.test(n))
+
+  const out = []
+  const claimed = new Set()
+
+  if (manifest) {
+    for (const raw of manifest) {
+      if (!raw || typeof raw !== 'object') continue
+      const downloadUrl = String(raw.downloadUrl || '').trim()
+      const tail = downloadUrl.split('/').pop().split('?')[0]
+      if (tail) claimed.add(tail)
+      const platformLabel = String(raw.platform || 'Download').trim()
+      const lower = platformLabel.toLowerCase()
+      const iconName = String(raw.iconPath || '').split('/').pop()
+      out.push({
+        id: String(raw.id ?? raw.appName ?? tail),
+        name: String(raw.appName || raw.name || tail || 'App').trim(),
+        version: String(raw.version || '').trim(),
+        platform: {
+          id: lower,
+          label: platformLabel,
+          icon: lower.includes('ios') ? '🍎' : lower.includes('android') ? '🤖' : '📦'
+        },
+        description: String(raw.description || '').trim(),
+        fileSize: String(raw.fileSize || '').trim(),
+        size: 0,
+        downloadUrl,
+        pageUrl: '',
+        // An icon only counts when the file it names is really there.
+        icon: iconName ? APPS_ICON_RAW + String(raw.iconPath).replace(/^\/+/, '') : '',
+        iconOk: Boolean(iconName) && fileNames.includes(iconName),
+        file: tail,
+        downloadOk: manifestFileExists(downloadUrl, fileNames)
+      })
+    }
+  }
+
+  // Anything dropped into the folder that the manifest has not claimed yet.
+  for (const name of apks) {
+    if (claimed.has(name)) continue
+    out.push({
+      id: name,
+      name: titleFor(name),
+      version: '',
+      platform: platformFor(name),
+      description: '',
+      fileSize: '',
+      size: 0,
+      downloadUrl:
+        `https://raw.githubusercontent.com/${APPS_REPO}/${APPS_REF}/church-apps/${encodeURIComponent(name)}`,
+      pageUrl: '',
+      icon: '',
+      iconOk: false,
+      file: name,
+      downloadOk: true
+    })
+  }
+
+  return { apps: out, fromManifest: Boolean(manifest) }
 }
 
 /* ======================================================================

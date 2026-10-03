@@ -816,16 +816,32 @@ ok('the close timer is cleared on unmount',
 ok('Apps appears in the mobile menu too',
   /to="\/apps"[\s\S]{0,200}mobile-link/.test(navTxt))
 
-ok('the Apps page reads the service, not a hard-coded list',
-  /from '\.\.\/js\/appsService\.js'/.test(appsPage) && /fetchApps\(/.test(appsPage))
+ok('the Apps page reads the manifest service, not a hard-coded list',
+  /from '\.\.\/js\/appsService\.js'/.test(appsPage) && /fetchAppsRich\(/.test(appsPage))
+// The manifest may name a binary that was never uploaded. Linking it anyway
+// would hand visitors a dead Download button, so availability is verified.
+ok('a manifest entry whose file is missing is marked unavailable',
+  /downloadOk/.test(appsPage) && /app-unavailable/.test(appsPage) &&
+  /v-if="app\.downloadOk"/.test(appsPage))
+ok('the card shows the manifest version, size and description',
+  /app\.version/.test(appsPage) && /app\.fileSize/.test(appsPage) &&
+  /app\.description/.test(appsPage))
+ok('a real icon is used only when the file exists',
+  /v-if="app\.icon && app\.iconOk"/.test(appsPage))
+ok('downloads are real links with a download attribute',
+  /:href="app\.downloadUrl"/.test(appsPage) && /rel="noopener noreferrer"/.test(appsPage) &&
+  /:download="app\.file"/.test(appsPage))
+ok('the service merges manifest entries with loose APK files',
+  /export async function fetchAppsRich/.test(as) && /claimed/.test(as))
 // "Could not load" and "there are no apps" are different facts; conflating them
 // would tell a visitor their download is gone when it is only a network blip.
 ok('an empty folder and a failed lookup render different states',
   /v-else-if="problem"/.test(appsPage) && /v-else-if="!apps\.length"/.test(appsPage))
 ok('both states still offer the GitHub folder link',
   (appsPage.match(/APPS_BROWSER_URL/g) || []).length >= 3)
-ok('downloads are real links with a github page fallback',
-  /app\.downloadUrl \|\| app\.pageUrl/.test(appsPage) && /rel="noopener noreferrer"/.test(appsPage))
+ok('no dead download links: an unavailable app has no anchor',
+  !/app\.downloadUrl \|\| app\.pageUrl/.test(appsPage) &&
+  /v-if="app\.downloadOk"/.test(appsPage))
 
 console.log('\n--- 23. List: category buttons + Chinese-edition notice ---')
 ok('three category buttons are rendered', /v-for="c in categoryButtons"/.test(rd))

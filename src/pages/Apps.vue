@@ -35,28 +35,46 @@
 
       <ul v-else class="apps-grid">
         <li v-for="app in apps" :key="app.id" class="app-card glass-card">
-          <div class="app-icon" aria-hidden="true">{{ app.platform.icon }}</div>
+          <!-- A real icon when the manifest names one that exists, otherwise the
+               platform glyph. A broken <img> would look worse than no image. -->
+          <img
+            v-if="app.icon && app.iconOk"
+            :src="app.icon"
+            :alt="`${app.name} icon`"
+            class="app-icon-img"
+            loading="lazy"
+          />
+          <div v-else class="app-icon" aria-hidden="true">{{ app.platform.icon }}</div>
+
           <div class="app-body">
-            <h2 class="app-name">{{ app.name }}</h2>
+            <h2 class="app-name">
+              {{ app.name }}
+              <span v-if="app.version" class="app-version">v{{ app.version }}</span>
+            </h2>
             <p class="app-meta">
               <span class="app-platform">{{ app.platform.label }}</span>
-              <span v-if="sizeOf(app.size)" class="app-size">&middot; {{ sizeOf(app.size) }}</span>
+              <span v-if="app.fileSize" class="app-size">&middot; {{ app.fileSize }}</span>
             </p>
-            <p class="app-file">{{ app.file }}</p>
+            <p v-if="app.description" class="app-desc">{{ app.description }}</p>
+
+            <!-- A manifest entry can name a file that was never uploaded. That
+                 is a publishing gap, not the visitor's problem, so it is stated
+                 plainly and no dead download link is offered. -->
+            <p v-if="!app.downloadOk" class="app-pending">
+              Not published yet — this build is still being prepared.
+            </p>
           </div>
+
           <div class="app-actions">
-            <!-- The raw link is tried first; the file's GitHub page is a
-                 fallback for networks that block raw.githubusercontent.com. -->
             <a
+              v-if="app.downloadOk"
               class="app-download"
-              :href="app.downloadUrl || app.pageUrl"
+              :href="app.downloadUrl"
               target="_blank"
               rel="noopener noreferrer"
-              :download="app.downloadUrl ? app.file : undefined"
+              :download="app.file"
             >Download</a>
-            <a class="app-page" :href="app.pageUrl" target="_blank" rel="noopener noreferrer">
-              Details
-            </a>
+            <span v-else class="app-unavailable">Unavailable</span>
           </div>
         </li>
       </ul>
@@ -75,7 +93,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { fetchApps, formatSize, APPS_BROWSER_URL } from '../js/appsService.js'
+import { fetchAppsRich, APPS_BROWSER_URL } from '../js/appsService.js'
 
 const apps = ref([])
 const loading = ref(true)
@@ -83,15 +101,15 @@ const problem = ref('')
 const problemTitle = ref('')
 const problemText = ref('')
 
-function sizeOf(bytes) {
-  return formatSize(bytes)
-}
-
 /** Honest copy per failure. None of these blame the visitor. */
 const PROBLEM_COPY = {
   unavailable: {
     title: 'Could not reach GitHub',
     text: 'The app list is served from GitHub and the request did not go through. Check your connection and try again.'
+  },
+  empty: {
+    title: 'No apps published yet',
+    text: 'The apps folder is currently empty. When a build is added to it, it will appear here automatically.'
   },
   'rate-limited': {
     title: 'Too many requests',
@@ -111,14 +129,21 @@ async function load() {
   loading.value = true
   problem.value = ''
   try {
-    const result = await fetchApps()
+    // The manifest carries version, description and icon; loose APK files are
+    // merged in by fetchAppsRich, so a newly dropped build still shows up even
+    // before someone writes a manifest entry for it.
+    const result = await fetchAppsRich()
     apps.value = result.apps
-    if (result.problem) {
-      problem.value = result.problem
-      const copy = PROBLEM_COPY[result.problem] || PROBLEM_COPY.unknown
+    if (!result.apps.length) {
+      const copy = PROBLEM_COPY.empty || PROBLEM_COPY.unknown
+      problem.value = 'empty'
       problemTitle.value = copy.title
       problemText.value = copy.text
     }
+  } catch {
+    problem.value = 'unavailable'
+    problemTitle.value = PROBLEM_COPY.unavailable.title
+    problemText.value = PROBLEM_COPY.unavailable.text
   } finally {
     loading.value = false
   }
@@ -203,7 +228,52 @@ onMounted(load)
   border-radius: 18px;
 }
 
+.app-icon-img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+}
+
 .app-icon { font-size: 38px; line-height: 1; flex-shrink: 0; }
+
+.app-version {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.18);
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.app-desc {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* A manifest entry whose binary was never uploaded. Informational, not an
+   error: the visitor did nothing wrong. */
+.app-pending {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.app-unavailable {
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px dashed var(--border-color);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 
 .app-body { flex: 1; min-width: 0; }
 
