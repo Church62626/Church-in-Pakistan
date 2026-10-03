@@ -440,8 +440,18 @@ ok('speed slider exists', /type="range"[\s\S]{0,200}?min="0\.5"[\s\S]{0,200}?max
 ok('speed is clamped to a sane range', /Math\.min\(1\.5, Math\.max\(0\.5/.test(ls))
 ok('speed survives starting a new track', /applySpeed\(el\)[\s\S]{0,60}?el\.play\(\)/.test(ls))
 ok('speed survives a mid-playback change', /watch\(speed, \(\) => applySpeed/.test(ls))
-// A missing recording must say so rather than spin forever.
-ok('a failed load reports itself', /function onError\(\)/.test(ls) && /No recording found/.test(ls))
+// A missing recording must say so rather than spin forever, and it must not be
+// phrased as a fault the visitor caused.
+ok('a failed load reports itself', /function onError\(\)/.test(ls) && /No recording/.test(ls))
+ok('...without the old alarming wording',
+  !/The recording could not be loaded/.test(ls))
+// An <audio> mounted with an empty src makes the browser fetch the page URL and
+// fire `error`, which is what showed a red error on a freshly opened Listen tab.
+ok('no <audio> is mounted when nothing is selected',
+  /<section v-if="!current" class="player player-empty/.test(ls) &&
+  /<section v-else class="player/.test(ls))
+ok('the empty state invites the user to pick a hymn',
+  /select a hymn from the list below/i.test(ls))
 ok('play is only started from a click (autoplay rules)', /el\.play\(\)\.catch/.test(ls))
 ok('it stops audio on unmount', /onUnmounted[\s\S]{0,200}?stop\(\)/.test(ls))
 // The Chinese hymnal has no hymnal/ audio folder; it must map to hymns/.
@@ -645,6 +655,58 @@ ok('every entry has lyrics', ruNewsong.entries.every((e) =>
   Array.isArray(e.content) && e.content.length > 0))
 ok('no raw TAB survives into the lyrics',
   !ruNewsong.entries.some((e) => JSON.stringify(e).includes(TAB)))
+
+console.log('\n--- 18. List page: keypad CSS and lyric typography ---')
+// The keypad/search CSS was never committed, so the finder rendered as raw
+// unstyled HTML controls. These assert the rules exist, not just the markup.
+const listStyle = rd.slice(rd.indexOf('<style scoped>'))
+ok('the keypad grid rule exists', /\.keypad \{[\s\S]*?grid-template-columns: repeat\(3/.test(listStyle))
+ok('keypad keys have a 52px floor',
+  /\.keypad-key \{[\s\S]*?min-height: 52px/.test(listStyle))
+ok('keypad keys are real buttons, not divs',
+  /<button[^>]*class="keypad-key"/.test(rd))
+ok('the search input is styled', /\.finder-input \{/.test(listStyle))
+ok('the keypad container is styled', /\.hymn-finder \{/.test(listStyle))
+ok('the search results are styled', /\.finder-results \{/.test(listStyle))
+
+// Urdu lyrics fell back to a Latin serif because `.reader-content` in
+// fonts.css sets font-family at the same specificity as `.script-*`, and
+// the later declaration won. The fix re-asserts the script stacks with a
+// compound selector, so the body matches the title.
+ok('the lyric body re-asserts the Nastaliq stack',
+  /\.reader-content\.script-arabic-nastaliq \{[\s\S]*?--font-urdu-body/.test(listStyle))
+ok('Naskh regional scripts are covered too',
+  /\.reader-content\.script-arabic-naskh \{[\s\S]*?--font-arabic-body/.test(listStyle))
+ok('the lyrics container carries the script class',
+  /class="reader-content"[\s\S]{0,120}?:class="scriptClass\(language\)"/.test(rd))
+ok('the lyric rule beats the bare .reader-content rule',
+  rd.indexOf('.reader-content.script-arabic-nastaliq') > rd.indexOf('.reader-content {'))
+
+console.log('\n--- 19. Language selector: no layout shift, and it works ---')
+const sel = read('./src/components/LanguageSelector.vue')
+// Locking body scroll removes the scrollbar, shifting the page sideways.
+ok('it does NOT lock body scroll', !/body\.style\.overflow/.test(sel))
+ok('the menu is position: fixed so it floats', /\.lang-menu \{[\s\S]*?position: fixed/.test(sel))
+ok('it animates with a transition', /<transition name="lang-drop">/.test(sel))
+ok('...with a reduced-motion escape', /prefers-reduced-motion/.test(sel))
+ok('transition classes are global (the menu is teleported)',
+  /:global\(\.lang-drop-enter-active\)/.test(sel))
+// A teleported node is not inside .lang-select, so the click-away guard has to
+// be based on the option element rather than the wrapper.
+ok('click-away still dismisses', /onDocPointerDown/.test(sel))
+ok('Escape still closes', /Escape/.test(sel))
+
+console.log('\n--- 20. every language-aware page follows the global store ---')
+ok('List subscribes to the language store', /subscribeLanguage/.test(rd))
+ok('List seeds from the store when the URL is silent', /getActiveLanguage\(\)/.test(rd))
+ok('List unsubscribes on unmount', /onBeforeUnmount[\s\S]{0,220}?unsubscribeLanguage\(\)/.test(rd))
+ok('Library subscribes too', /subscribeLanguage/.test(lib))
+ok('Listen subscribes too', /subscribeLanguage/.test(ls))
+// The nav must rewrite the query on every language-aware route, otherwise the
+// page looks unchanged even though the store updated.
+ok('nav treats library, list AND listen as language-aware',
+  /wantsLanguage = \['library', 'list', 'listen'\]/.test(nav))
+ok('nav applies the new language to the store', /setActiveLanguage\(key\)/.test(nav))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

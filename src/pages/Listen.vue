@@ -9,14 +9,19 @@
       <!-- Player: standard HTML5 <audio>. Deliberately no Web Audio API and no
            PCM decoding - the browser's own decoder handles MP3 far more
            efficiently, and `playbackRate` gives speed control for free. -->
-      <section class="player glass-card" aria-label="Audio player">
+      <section v-if="!current" class="player player-empty glass-card" aria-label="Audio player">
+        <div class="player-placeholder" aria-hidden="true">🎧</div>
+        <h2 class="player-empty-title">Nothing selected yet</h2>
+        <p class="player-empty-text">Please select a hymn from the list below to begin listening.</p>
+      </section>
+
+      <section v-else class="player glass-card" aria-label="Audio player">
         <div class="player-track">
           <p class="player-title" :class="scriptClass(language)">
-            {{ current ? current.title : 'No hymn selected' }}
+            {{ current.title }}
           </p>
-          <p v-if="current" class="player-meta">
-            {{ languageLabel }}
-            <template v-if="current.subcat"> &middot; {{ current.subcat }}</template>
+          <p v-if="current.subcat" class="player-meta">
+            {{ languageLabel }} &middot; {{ current.subcat }}
           </p>
         </div>
 
@@ -33,7 +38,6 @@
         <p v-if="status" class="player-status" :class="{ error: isError }" role="status">
           {{ status }}
         </p>
-
         <div class="player-controls">
           <button
             type="button"
@@ -280,9 +284,11 @@ function onError() {
   isLoading.value = false
   isPlaying.value = false
   isError.value = true
+  // A track that exists but has no recording is a data gap, not a fault the
+  // visitor caused, so it reads as information rather than a red error.
   status.value = current.value
-    ? `No recording found for hymn ${current.value.id}.`
-    : 'The recording could not be loaded.'
+    ? `No recording has been uploaded for hymn ${current.value.id} yet.`
+    : 'Select a hymn to start listening.'
 }
 
 function onSeek(event) {
@@ -339,6 +345,32 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ---- empty state: nothing selected yet ---- */
+.player-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 24px;
+}
+
+.player-placeholder { font-size: 46px; line-height: 1; margin-bottom: 12px; }
+
+.player-empty-title {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.player-empty-text {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 .listen-page { padding: 28px 16px 90px; }
 
 .listen-container {

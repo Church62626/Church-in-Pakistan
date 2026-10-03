@@ -186,7 +186,9 @@ function onLanguageChange(key) {
 
   const route = router.currentRoute.value
   if (!route?.name) return
-  const wantsLanguage = ['library', 'list'].includes(String(route.name))
+  // Every page whose content is language-specific. Missing one here is what
+  // made choosing a language look like it did nothing on that page.
+  const wantsLanguage = ['library', 'list', 'listen'].includes(String(route.name))
   if (!wantsLanguage) return
 
   const query = { ...route.query, language: key }

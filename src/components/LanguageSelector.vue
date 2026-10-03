@@ -15,13 +15,14 @@
 
     <!-- Teleported so the nav's backdrop-filter cannot clip the dropdown -->
     <teleport to="body">
-      <ul
-        v-if="open"
-        class="lang-menu"
-        role="listbox"
-        aria-label="Choose a language"
-        :style="menuStyle"
-      >
+      <transition name="lang-drop">
+        <ul
+          v-if="open"
+          class="lang-menu"
+          role="listbox"
+          aria-label="Choose a language"
+          :style="menuStyle"
+        >
         <li v-for="lang in languages" :key="lang.key" role="none">
           <button
             type="button"
@@ -38,7 +39,8 @@
             <span v-if="!lang.published" class="lang-soon">Soon</span>
           </button>
         </li>
-      </ul>
+        </ul>
+      </transition>
     </teleport>
 
     <!-- Click-away / Escape backdrop -->
@@ -47,7 +49,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { LANGUAGES, getLanguage, scriptClass } from '../js/hymnService.js'
 
 const props = defineProps({
@@ -107,10 +109,14 @@ function onDocPointerDown(e) {
   close()
 }
 
-watch(open, (v) => {
-  if (typeof document === 'undefined') return
-  document.body.style.overflow = v ? 'hidden' : ''
-})
+// Scroll locking is deliberately NOT applied while the menu is open.
+//
+// Hiding the scrollbar removes the scrollbar's width from the document, so the
+// page jumps sideways by that width the instant the dropdown opens and snaps
+// back when it closes. That shift was the reported "jerk", and it is worse than
+// any benefit from blocking scroll on a short menu. The menu is
+// `position: fixed` so it floats over the page, and the fixed backdrop
+// underneath it handles click-away dismissal.
 
 onMounted(() => {
   document.addEventListener('keydown', onKeydown)
@@ -119,7 +125,6 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   document.removeEventListener('pointerdown', onDocPointerDown)
-  if (typeof document !== 'undefined') document.body.style.overflow = ''
 })
 </script>
 
@@ -236,6 +241,27 @@ onUnmounted(() => {
   padding: 2px 6px;
   border-radius: 999px;
   background: rgba(127, 127, 127, 0.2);
+}
+
+/* Menu transition: a short fade + slight rise. The menu is position:fixed, so
+   it never reflows the page - only its own opacity and transform animate.
+   The classes are emitted on a teleported node, so they must be global; scoped
+   rules would not match. Reduced-motion users get an instant appear instead. */
+:global(.lang-drop-enter-active),
+:global(.lang-drop-leave-active) {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform-origin: top right;
+}
+
+:global(.lang-drop-enter-from),
+:global(.lang-drop-leave-to) {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.lang-drop-enter-active),
+  :global(.lang-drop-leave-active) { transition: none; }
 }
 
 @media (max-width: 768px) {

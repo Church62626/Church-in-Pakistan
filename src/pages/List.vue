@@ -307,7 +307,9 @@ import {
   isRtl,
   isUnpublished,
   CATEGORY_META,
-  fetchCatalog
+  fetchCatalog,
+  getActiveLanguage,
+  onLanguageChange as subscribeLanguage
 } from '../js/hymnService'
 
 const route = useRoute()
@@ -323,9 +325,13 @@ function queryValue(name) {
  * Reader state
  * ------------------------------------------------------------------ */
 
-/* The Library passes `language=`, older links used `lang=` - accept both. */
+/* The Library passes `language=`, older links used `lang=` - accept both.
+   A URL that names a language wins on first load, because the link may have
+   been shared; otherwise the global store (the nav bar's selector) decides. */
 const startLanguage = queryValue('lang') || queryValue('language')
-const language = ref(getLanguage(startLanguage) ? startLanguage : 'urdu')
+const language = ref(
+  getLanguage(startLanguage) ? startLanguage : getActiveLanguage()
+)
 const requestedId = computed(() => queryValue('id'))
 const category = computed(() =>
   normaliseCategory(queryValue('category') || queryValue('cat') || 'hymns')
@@ -950,10 +956,24 @@ function onEnded() {
  * Lifecycle
  * ------------------------------------------------------------------ */
 
+// Follow the nav bar's language selector. Without this the page only ever read
+// the language from the URL, so choosing a language elsewhere appeared to do
+// nothing here. The existing watchers on `language` handle the reload.
+let unsubscribeLanguage = null
 onMounted(() => {
   loadHymn()
   applyAudioSource()
   loadSearchIndex(language.value)
+  unsubscribeLanguage = subscribeLanguage((key) => {
+    if (key !== language.value) {
+      language.value = key
+      // Keep the address bar in step so the view stays shareable.
+      router.replace({
+        path: '/list',
+        query: { ...route.query, language: key }
+      })
+    }
+  })
 })
 
 // Re-index when the language changes so search results stay in the language
@@ -1013,6 +1033,7 @@ watch(
 onBeforeUnmount(() => {
   stopClock()
   midi.dispose()
+  if (unsubscribeLanguage) unsubscribeLanguage()
 })
 </script>
 
@@ -1489,6 +1510,171 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
+/* ---- hymn finder: keypad + search --------------------------------- */
+.hymn-finder {
+  margin: 0 auto 26px;
+  padding: 20px;
+  border-radius: 16px;
+  max-width: 720px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+.finder-heading {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 14px;
+}
+
+.finder-fields {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.finder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 130px;
+}
+
+.finder-field-grow { flex: 1; min-width: 190px; }
+
+.finder-field > span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.finder-input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+  color: var(--text-primary);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 1rem;
+}
+
+.finder-input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+
+.finder-input:focus-visible {
+  outline: 2px solid var(--primary-color, #4f7cff);
+  outline-offset: 1px;
+}
+
+.finder-go {
+  padding: 11px 22px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+.finder-go:hover:not(:disabled) { filter: brightness(1.08); }
+.finder-go:disabled { opacity: 0.45; cursor: default; }
+
+/* Keypad: 3 columns, 52px+ square targets for one-handed phone use. */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  max-width: 300px;
+}
+
+.keypad-key {
+  /* min-height guarantees the 52px floor even if a grid row is squeezed. */
+  min-height: 52px;
+  min-width: 52px;
+  border-radius: 12px;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  background: rgba(127, 127, 127, 0.1);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.keypad-key:hover { background: rgba(127, 127, 127, 0.2); }
+.keypad-key:active { transform: scale(0.95); }
+
+.keypad-key:focus-visible {
+  outline: 2px solid var(--primary-color, #4f7cff);
+  outline-offset: 2px;
+}
+
+.keypad-key.wide {
+  font-size: 0.95rem;
+  background: rgba(192, 57, 43, 0.14);
+}
+
+.finder-hint {
+  margin: 14px 0 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.finder-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.finder-result {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.finder-result:hover,
+.finder-result:focus-visible {
+  background: rgba(127, 127, 127, 0.16);
+  outline: none;
+}
+
+.finder-result-no {
+  min-width: 3.2ch;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.finder-result-title { font-size: 0.98rem; }
+
+.finder-empty {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+@media (max-width: 480px) {
+  .hymn-finder { padding: 16px; }
+  .keypad { max-width: none; }
+}
+
+/* ---- reader surface ------------------------------------------------ */
 .reader-content {
   background: var(--surface);
   backdrop-filter: blur(20px) saturate(180%);
@@ -1500,6 +1686,43 @@ onBeforeUnmount(() => {
   line-height: 1.9;
   color: var(--text-primary);
   transition: font-size 0.2s ease;
+}
+
+/* The lyric body must use the same Nastaliq/Naskh face as the title.
+   `fonts.css` sets `.reader-content { font-family: var(--font-reader) }`
+   (Merriweather, a Latin serif) with the SAME specificity as
+   `.script-arabic-nastaliq`, so whichever rule is declared later wins - and the
+   Latin serif was winning, which is why Urdu titles rendered correctly in
+   Nastaliq while the lyrics fell back to a generic face.
+
+   Re-asserting the script stacks at higher specificity fixes the body text
+   without changing the global stylesheet, and without touching Latin/CJK. */
+.reader-content.script-arabic-nastaliq {
+  font-family: var(--font-urdu-body);
+  direction: rtl;
+  text-align: right;
+  line-height: 2.2;
+}
+
+.reader-content.script-arabic-naskh {
+  font-family: var(--font-arabic-body);
+  direction: rtl;
+  text-align: right;
+  line-height: 1.9;
+}
+
+.reader-content.script-gurmukhi {
+  font-family: var(--font-gurmukhi-body);
+  direction: ltr;
+  text-align: left;
+  line-height: 1.95;
+}
+
+.reader-content.script-cjk {
+  font-family: var(--font-cjk-body);
+  direction: ltr;
+  text-align: left;
+  line-height: 1.8;
 }
 
 .reader-content .stanza {
