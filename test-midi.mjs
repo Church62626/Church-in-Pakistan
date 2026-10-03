@@ -179,13 +179,22 @@ ok('sample failures are surfaced without rejecting',
   /midi\.onSampleError = \(err\) =>/.test(rd) && /if \(this\.onSampleError\) this\.onSampleError\(err, note\)/.test(eng))
 
 /* ---- Language tests ---- */
-console.log('\n--- L. regional languages are registered ---')
+console.log('\n--- L. only the active languages are registered ---')
 const keys = LANGUAGES.map((l) => l.key)
-ok('punjabi present', keys.includes('punjabi'))
-ok('pashto present', keys.includes('pashto'))
-ok('sindhi present', keys.includes('sindhi'))
-ok('balochi present', keys.includes('balochi'))
-ok('backwards compatible: chinese still present', keys.includes('chinese'))
+// Punjabi, Pashto, Sindhi and Balochi were removed: their lyric folders were
+// never published, so they only ever rendered an empty tab. They are asserted
+// GONE here, because the failure mode of "hide in the UI but keep in the config"
+// is that they quietly reappear somewhere else.
+ok('urdu present', keys.includes('urdu'))
+ok('roman-urdu present', keys.includes('roman-urdu'))
+ok('english present', keys.includes('english'))
+ok('chinese present', keys.includes('chinese'))
+ok('punjabi is gone', !keys.includes('punjabi'))
+ok('pashto is gone', !keys.includes('pashto'))
+ok('sindhi is gone', !keys.includes('sindhi'))
+ok('balochi is gone', !keys.includes('balochi'))
+ok('exactly the four active languages', keys.length === 4, keys.join(','))
+ok('every active language is published', LANGUAGES.every((l) => l.published))
 ok('no duplicate keys', new Set(keys).size === keys.length)
 ok('all have label + native + folder + suffix + lang + script',
   LANGUAGES.every((l) => l.label && l.native && l.folder && l.suffix !== undefined && l.lang && l.script))
@@ -193,39 +202,35 @@ ok('every language has a file() resolver', LANGUAGES.every((l) => typeof l.file 
 
 console.log('\n--- M. script + direction mapping ---')
 eq('urdu -> nastaliq', scriptClass('urdu'), 'script-arabic-nastaliq')
-eq('pashto -> naskh (NOT nastaliq)', scriptClass('pashto'), 'script-arabic-naskh')
-eq('sindhi -> naskh', scriptClass('sindhi'), 'script-arabic-naskh')
-eq('balochi -> naskh', scriptClass('balochi'), 'script-arabic-naskh')
-eq('punjabi -> gurmukhi', scriptClass('punjabi'), 'script-gurmukhi')
 eq('chinese -> cjk', scriptClass('chinese'), 'script-cjk')
 eq('english -> latin', scriptClass('english'), 'script-latin')
 eq('roman-urdu -> latin', scriptClass('roman-urdu'), 'script-latin')
-ok('pashto is RTL', isRtl('pashto'))
-ok('punjabi is LTR', !isRtl('punjabi'))
+ok('urdu is RTL', isRtl('urdu'))
+ok('chinese is LTR', !isRtl('chinese'))
 ok('unknown key -> latin', scriptClass('klingon') === 'script-latin')
-eq('lang attr pashto', langAttr('pashto'), 'ps')
-eq('lang attr punjabi', langAttr('punjabi'), 'pa')
+// A removed language must degrade to the neutral default rather than throw.
+ok('a removed key falls back to latin', scriptClass('punjabi') === 'script-latin')
+ok('a removed key is not RTL', !isRtl('pashto'))
+ok('getLanguage returns null for a removed key', getLanguage('sindhi') === null)
+eq('lang attr urdu', langAttr('urdu'), 'ur')
+eq('lang attr chinese', langAttr('chinese'), 'zh')
 
 console.log('\n--- N. Nastaliq stays Urdu-only ---')
 ok('only urdu is nastaliq', LANGUAGES.filter((l) => l.nastaliq).map((l) => l.key).join(',') === 'urdu')
-ok('regional arabic languages use the naskh font',
-  ['pashto', 'sindhi', 'balochi'].every((k) => getLanguage(k).fontVar === '--font-arabic-body'))
-ok('punjabi uses a gurmukhi font',
-  getLanguage('punjabi').fontVar === '--font-gurmukhi-body')
 
-console.log('\n--- O. regional languages resolve to the expected URLs ---')
-eq('punjabi hymns url',
-  buildJsonUrls('hymns', 'punjabi')[0],
-  `${JSON_BASE_URL}punjabi/hymns_pa.json`)
-eq('pashto newsong url',
-  buildJsonUrls('newsong', 'pashto')[0],
-  `${JSON_BASE_URL}pashto/newsong_ps.json`)
-eq('sindhi others url',
-  buildJsonUrls('others', 'sindhi')[0],
-  `${JSON_BASE_URL}sindhi/others_sd.json`)
+console.log('\n--- O. active languages resolve to the expected URLs ---')
 eq('urdu still uses the plural newsongs.json',
   buildJsonUrls('newsong', 'urdu')[0],
   `${JSON_BASE_URL}urdu/newsongs.json`)
+eq('english newsong url',
+  buildJsonUrls('newsong', 'english')[0],
+  `${JSON_BASE_URL}english/newsong_en.json`)
+eq('roman-urdu hymns url',
+  buildJsonUrls('hymns', 'roman-urdu')[0],
+  `${JSON_BASE_URL}roman-urdu/hymns_ru.json`)
+eq('chinese collapses to its single hymnal file',
+  buildJsonUrls('others', 'chinese')[0],
+  `${JSON_BASE_URL}chinese/hymnal_zh.json`)
 
 console.log('\n--- P. UI wiring ---')
 const libTxt = read('./src/pages/Library.vue')

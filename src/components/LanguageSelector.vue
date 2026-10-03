@@ -50,7 +50,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { LANGUAGES, getLanguage, scriptClass } from '../js/hymnService.js'
+import { PUBLISHED_LANGUAGES, getLanguage, scriptClass } from '../js/hymnService.js'
 
 const props = defineProps({
   modelValue: { type: String, default: 'english' }
@@ -86,9 +86,10 @@ function toggle() {
 function close() {
   open.value = false
 }
-// Only published languages are selectable; the rest are shown as "Soon" so
-// the full language list is visible without implying they are usable.
-const languages = LANGUAGES
+// Every remaining language is published, so there is no "Soon" state left to
+// render. Unreleased languages (Punjabi, Pashto, Sindhi, Balochi) were removed
+// from LANGUAGES rather than hidden, so they can never leak back into the UI.
+const languages = PUBLISHED_LANGUAGES
 const current = computed(() => getLanguage(props.modelValue))
 
 function choose(lang) {

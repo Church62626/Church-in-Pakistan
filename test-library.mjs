@@ -310,11 +310,20 @@ eq('a missing title degrades to Untitled',
 eq('published is coerced to a strict boolean',
   bs.toBook({ data: () => ({ language: 'urdu', fileUrl: 'u', published: 'yes' }) }).published, false)
 
+// Every remaining language is published, so the "not published yet" copy is a
+// safety net for a future language rather than a live state. These assert the
+// messages a visitor can actually see today, plus that an unknown key degrades
+// gracefully instead of leaking a raw error.
 ok('missing state names the language',
-  bs.booksEmptyMessage('punjabi').includes('Punjabi') &&
-  bs.booksEmptyMessage('punjabi').includes('not been published yet'))
-ok('unpublished language gets the tailored message',
-  bs.booksEmptyMessage('pashto').includes('English and Urdu books are ready'))
+  bs.booksEmptyMessage('urdu').includes('Urdu') &&
+  bs.booksEmptyMessage('chinese').includes('Chinese'))
+ok('a removed language falls back to neutral copy, not a crash',
+  bs.booksEmptyMessage('punjabi').includes('This language') ||
+  bs.booksEmptyMessage('punjabi').includes('books have not been published'),
+  bs.booksEmptyMessage('punjabi'))
+ok('no active language reports itself as unpublished',
+  !/not been published yet/.test(bs.booksEmptyMessage('urdu')) ||
+  /No Urdu books/.test(bs.booksEmptyMessage('urdu')))
 ok('unavailable state does not leak a raw error',
   bs.booksEmptyMessage('urdu', 'unavailable').includes('could not be reached'))
 ok('forbidden state does not leak a raw error',

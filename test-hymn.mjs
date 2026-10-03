@@ -242,8 +242,15 @@ ok('unknown key is rejected, previous value kept',
   setActiveLanguage('klingon') === 'chinese' && getActiveLanguage() === 'chinese',
   getActiveLanguage())
 
-ok('unpublished language is rejected',
+// Punjabi / Pashto / Sindhi / Balochi were removed from LANGUAGES, so they are
+// now rejected as *unknown* keys rather than as unpublished ones. Either way
+// the previous value must survive, which is what keeps a stale ?language=punjabi
+// bookmark from blanking the app.
+ok('a removed language is rejected and the value is kept',
   setActiveLanguage('punjabi') === 'chinese' && getActiveLanguage() === 'chinese',
+  getActiveLanguage())
+ok('...and so is pashto',
+  setActiveLanguage('pashto') === 'chinese' && getActiveLanguage() === 'chinese',
   getActiveLanguage())
 
 let notified = null
