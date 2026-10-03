@@ -398,8 +398,18 @@ ok('search is case and diacritic insensitive',
   /function fold\(/.test(rd) && /normalize\('NFD'\)/.test(rd))
 // A one-letter query over 800 hymns would otherwise render 800 rows.
 ok('result list is capped', /MAX_SEARCH_RESULTS = \d+/.test(rd))
-ok('search failure does not break the page',
-  /search index unavailable/.test(rd) && /searchIndex\.value = \[\]/.test(rd))
+// The index spans every language, so one edition failing must not blank the
+// finder: the failing language is skipped and the rest still search.
+ok('a failed language does not break search',
+  /hymn search index unavailable for /.test(rd) &&
+  /catch \(err\)[\s\S]{0,160}return \[\]/.test(rd))
+ok('...and the index is not wiped on a partial failure',
+  !/searchIndex\.value = \[\]/.test(rd))
+ok('the index is built once, not per language tab',
+  /loadSearchIndex\(\)/.test(rd) && !/loadSearchIndex\(language\.value\)/.test(rd) &&
+  !/loadSearchIndex\(key\)/.test(rd))
+ok('results carry their own edition, not the active tab',
+  /language: langKey/.test(rd) && /language: r\.language/.test(rd) && /scriptClass\(r\.language\)/.test(rd))
 // Losing the language or category on jump would show the wrong language.
 ok('jump keeps language and category',
   /openByNumber[\s\S]{0,500}?category: category\.value, language: language\.value/.test(rd))
@@ -814,6 +824,37 @@ ok('both states still offer the GitHub folder link',
   (appsPage.match(/APPS_BROWSER_URL/g) || []).length >= 3)
 ok('downloads are real links with a github page fallback',
   /app\.downloadUrl \|\| app\.pageUrl/.test(appsPage) && /rel="noopener noreferrer"/.test(appsPage))
+
+console.log('\n--- 23. List: category buttons + Chinese-edition notice ---')
+ok('three category buttons are rendered', /v-for="c in categoryButtons"/.test(rd))
+ok('...from the shared CATEGORY_META, so labels cannot drift',
+  /const categoryButtons = computed\(\(\) => CATEGORY_META\)/.test(rd))
+ok('the active category is marked', /'is-active': category === c\.key/.test(rd) &&
+  /:aria-pressed="category === c\.key"/.test(rd))
+ok('every category has a short button label',
+  CATEGORY_META.every((c) => c.short && c.label && c.emoji))
+
+// The Chinese hymnal is one unified file whose ids do not always match the
+// Urdu/English numbering. The notice must name the hymn and read as
+// information, not blame the visitor.
+ok('a missing Chinese id raises the exact notice',
+  /not available in the Chinese edition/.test(rd))
+ok('the notice names the hymn that is missing', /Hymn \$\{id\}/.test(rd))
+ok('the check only applies to the unified Chinese edition',
+  /langMeta\.value\?\.unified/.test(rd) && /unified/.test(read('./src/js/hymnService.js')))
+ok('...and not to the category already open',
+  /key !== category\.value/.test(rd))
+// A false warning on a hymn that IS present would be worse than no warning, so
+// the id is checked against a real index rather than assumed missing.
+ok('the id is checked against a real Chinese index',
+  /chineseIndex\.value\.has\(String\(id\)\)/.test(rd) &&
+  /async function loadChineseIndex\(\)/.test(rd))
+ok('a failed Chinese lookup does not raise a false warning',
+  /chineseIndex\.value = new Set\(\)/.test(rd))
+ok('the notice is a polite live region, not an alert',
+  /role="status"/.test(rd) && /aria-live="polite"/.test(rd))
+ok('the toast timer is cleared on unmount',
+  /onBeforeUnmount[\s\S]{0,300}clearTimeout\(toastTimer\)/.test(rd))
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

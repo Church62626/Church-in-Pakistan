@@ -1,5 +1,19 @@
 <template>
   <div class="reader-page">
+    <!-- Polite live region: the Chinese-edition notice is informational, not an
+         error, so it must not interrupt a screen reader mid-sentence. -->
+    <transition name="toast-rise">
+      <div v-if="toast" class="toast" role="status" aria-live="polite">
+        <span class="toast-icon" aria-hidden="true">ℹ️</span>
+        <span class="toast-text">{{ toast }}</span>
+        <button
+          type="button"
+          class="toast-close"
+          aria-label="Dismiss"
+          @click="showToast('')"
+        >✕</button>
+      </div>
+    </transition>
     <div class="reader-container">
       <!-- Floating reader controls -->
       <div class="reader-toolbar">
@@ -82,20 +96,42 @@
         </p>
 
         <ul v-if="searchResults.length" class="finder-results">
-          <li v-for="r in searchResults" :key="`${r.id}-${r.title}`">
+          <li v-for="r in searchResults" :key="`${r.language}-${r.id}-${r.title}`">
+            <!-- The row links to the edition the match was actually found in,
+                 not the currently selected tab. -->
             <router-link
               class="finder-result"
-              :to="{ path: '/list', query: { id: r.id, category, language } }"
+              :to="{ path: '/list', query: { id: r.id, category, language: r.language } }"
             >
               <span class="finder-result-no">{{ r.no ?? r.id }}</span>
-              <span class="finder-result-title" :class="scriptClass(language)">{{ r.title }}</span>
+              <span class="finder-result-title" :class="scriptClass(r.language)">{{ r.title }}</span>
+              <span class="finder-result-lang">{{ langName(r.language) }}</span>
             </router-link>
           </li>
         </ul>
+        <p v-else-if="loadingIndex && searchTerm.trim()" class="finder-empty">
+          Searching every language...
+        </p>
         <p v-else-if="searchTerm.trim()" class="finder-empty">
-          No hymns match "{{ searchTerm.trim() }}".
+          No hymns match "{{ searchTerm.trim() }}" in any language.
         </p>
       </section>
+
+      <!-- Category switcher: Hymns / New Songs / Others. -->
+      <nav class="cat-switch" aria-label="Hymn category">
+        <button
+          v-for="c in categoryButtons"
+          :key="c.key"
+          type="button"
+          class="cat-btn glass-btn"
+          :class="{ 'is-active': category === c.key }"
+          :aria-pressed="category === c.key"
+          @click="selectCategory(c.key)"
+        >
+          <span class="cat-emoji" aria-hidden="true">{{ c.emoji }}</span>
+          <span class="cat-label">{{ c.short || c.label }}</span>
+        </button>
+      </nav>
 
       <!-- Language switcher. Every language in the service is listed, including
            regional ones whose content is not published yet - those stay
@@ -298,6 +334,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   LANGUAGES,
+  PUBLISHED_LANGUAGES,
   fetchHymn,
   getAudioUrlCandidates,
   getLanguage,
@@ -378,6 +415,69 @@ const searchTerm = ref('')
  *  thousands of DOM nodes. */
 const MAX_SEARCH_RESULTS = 50
 
+/** The three app-level categories, always shown in the same order. */
+const categoryButtons = computed(() => CATEGORY_META)
+
+/**
+ * Chinese is a single unified hymnal: `hymnal_zh.json` carries every hymn and
+ * collapses the three app categories into one. Its ids do not always line up
+ * with the Urdu/English numbering, so opening a non-Chinese id in Chinese can
+ * genuinely fail. Rather than land someone on an error page, say so plainly and
+ * offer the edition that does have the hymn.
+ */
+const toast = ref('')
+let toastTimer = null
+
+function showToast(message) {
+  toast.value = message
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.value = ''
+    toastTimer = null
+  }, 4200)
+}
+
+/** Switch category, resolving the Chinese exception. */
+function selectCategory(key) {
+  const meta = CATEGORY_META.find((c) => c.key === key) || CATEGORY_META[0]
+  const id = requestedId.value.trim()
+  const target = { path: '/list', query: { category: meta.key, language: language.value } }
+
+  if (id) target.query.id = id
+
+  // Only the Chinese edition needs checking, and only when it is not the one
+  // already open - re-checking would warn about the hymn the visitor is reading.
+  if (langMeta.value?.unified && key !== category.value && id) {
+    const known = chineseIndex.value.has(String(id))
+    if (!known) {
+      showToast(`Hymn ${id} is not available in the Chinese edition.`)
+      return
+    }
+  }
+  router.push(target)
+}
+
+/** Ids that genuinely exist in the unified Chinese hymnal. */
+const chineseIndex = ref(new Set())
+
+async function loadChineseIndex() {
+  try {
+    const catalog = await fetchCatalog('chinese')
+    const ids = new Set()
+    for (const book of catalog?.books ?? []) {
+      for (const h of book.hymns ?? []) {
+        const id = String(h.id ?? '').trim()
+        if (id) ids.add(id)
+      }
+    }
+    chineseIndex.value = ids
+  } catch {
+    // If the index cannot be built we must not block the Chinese reader, so the
+    // set stays empty and the check is skipped rather than warning falsely.
+    chineseIndex.value = new Set()
+  }
+}
+
 /** Digit-only, capped at 6 so the field cannot grow unbounded. */
 function pressKey(key) {
   if (key === 'clear') {
@@ -399,8 +499,17 @@ function openByNumber() {
   router.push({ path: '/list', query: { id, category: category.value, language: language.value } })
 }
 
-/** Every hymn in the current language, for searching. */
+/** Every hymn across EVERY active language, for searching.
+ *
+ *  The finder deliberately does not scope results to the selected language: a
+ *  visitor searching "grace" should not have to know which edition a hymn lives
+ *  in. Each result carries its own language so the row can label it and link
+ *  to that edition. `language` is stored on the item, never read from the
+ *  current tab, so switching tabs cannot silently re-label a result. */
 const searchIndex = ref([])
+/** True while the cross-language index is being built, so the UI can say so
+ *  instead of briefly claiming there are "no matches". */
+const loadingIndex = ref(false)
 
 /**
  * Case- and diacritic-insensitive matching. Chinese has no case, and Arabic
@@ -415,6 +524,11 @@ function fold(text) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+/** Short label for the edition a search hit came from. */
+function langName(key) {
+  return getLanguage(key)?.label || key
+}
+
 const searchResults = computed(() => {
   const term = fold(searchTerm.value.trim())
   if (!term) return []
@@ -426,26 +540,49 @@ const searchResults = computed(() => {
   return out
 })
 
-/** Load the searchable title list for a language. Failures are silent and
- *  leave the keypad working - search is an extra, not a requirement. */
-async function loadSearchIndex(lang) {
-  try {
-    const catalog = await fetchCatalog(lang)
-    const seen = new Set()
-    const items = []
-    for (const book of catalog?.books ?? []) {
+/** Load the searchable title list across every active language.
+ *
+ *  Loads run in parallel and are cached per language, so this happens once for
+ *  the whole session rather than on every language switch. A language that
+ *  fails is skipped: a partial index still searches usefully, and one broken
+ *  edition must not blank the finder. */
+async function loadSearchIndex() {
+  loadingIndex.value = true
+  const langs = PUBLISHED_LANGUAGES
+  const results = await Promise.all(
+    langs.map(async (lang) => {
+      try {
+        return lang.key
+          ? (await fetchCatalog(lang.key)).books ?? []
+          : []
+      } catch (err) {
+        console.warn(`hymn search index unavailable for ${lang.key}:`, err.message)
+        return []
+      }
+    })
+  )
+
+  const seen = new Set()
+  const items = []
+  results.forEach((books, i) => {
+    const langKey = langs[i].key
+    for (const book of books) {
       for (const h of book.hymns ?? []) {
-        const key = `${h.id}:${h.title}`
+        const key = `${langKey}:${h.id}:${h.title}`
         if (seen.has(key)) continue
         seen.add(key)
-        items.push({ id: h.id, no: h.no ?? h.zh_no, title: h.title || h.id })
+        items.push({
+          id: h.id,
+          no: h.no ?? h.zh_no,
+          title: h.title || h.id,
+          // Carried per item: the row must name the edition it actually found.
+          language: langKey
+        })
       }
     }
-    searchIndex.value = items
-  } catch (err) {
-    console.warn('hymn search index unavailable:', err.message)
-    searchIndex.value = []
-  }
+  })
+  searchIndex.value = items
+  loadingIndex.value = false
 }
 
 async function loadHymn() {
@@ -963,7 +1100,12 @@ let unsubscribeLanguage = null
 onMounted(() => {
   loadHymn()
   applyAudioSource()
-  loadSearchIndex(language.value)
+  // The index spans every language, so it is built once and never rebuilt on a
+  // language switch. Rebuilding per tab was the reason search felt per-language.
+  loadSearchIndex()
+  // Only needed to answer the Chinese-edition question; fetched in the
+  // background so it never delays the first paint of the hymn.
+  loadChineseIndex()
   unsubscribeLanguage = subscribeLanguage((key) => {
     if (key !== language.value) {
       language.value = key
@@ -976,11 +1118,10 @@ onMounted(() => {
   })
 })
 
-// Re-index when the language changes so search results stay in the language
-// actually being read.
-watch(language, (key) => {
+watch(language, () => {
+  // Clearing the box avoids leaving stale cross-language rows under a tab that
+  // the visitor has just switched away from.
   searchTerm.value = ''
-  loadSearchIndex(key)
 })
 
 /**
@@ -1034,11 +1175,124 @@ onBeforeUnmount(() => {
   stopClock()
   midi.dispose()
   if (unsubscribeLanguage) unsubscribeLanguage()
+  // A pending toast would otherwise fire setState on an unmounted component.
+  if (toastTimer) {
+    clearTimeout(toastTimer)
+    toastTimer = null
+  }
 })
 </script>
 
 
 <style scoped>
+/* ---- category switcher + toast ------------------------------------- */
+.cat-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 auto 18px;
+  justify-content: center;
+}
+
+.cat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* Matches the keypad's thumb-sized targets: these are tapped on a phone. */
+  min-height: 44px;
+  padding: 9px 16px;
+  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.cat-btn:hover { background: rgba(127, 127, 127, 0.16); }
+
+.cat-btn.is-active {
+  background: rgba(79, 124, 255, 0.18);
+  border-color: var(--primary-color, #4f7cff);
+}
+
+.cat-btn:focus-visible {
+  outline: 2px solid var(--primary-color, #4f7cff);
+  outline-offset: 2px;
+}
+
+.cat-emoji { font-size: 1.05rem; line-height: 1; }
+
+/* The edition a cross-language hit came from, so two results with the same
+   number are not indistinguishable. */
+.finder-result-lang {
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* ---- toast ------------------------------------------------------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 460px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  /* Informational, not an error: this uses the normal surface, never a red
+     alert, because the visitor has not done anything wrong. */
+  color: var(--text-primary);
+}
+
+.toast-text { font-size: 0.92rem; }
+
+.toast-close {
+  margin-left: 4px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toast-close:hover { background: rgba(127, 127, 127, 0.16); }
+
+.toast-rise-enter-active,
+.toast-rise-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-rise-enter-from,
+.toast-rise-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-rise-enter-active,
+  .toast-rise-leave-active { transition: none; }
+}
+
 .reader-page {
   min-height: 100vh;
   padding: 24px 16px 120px;

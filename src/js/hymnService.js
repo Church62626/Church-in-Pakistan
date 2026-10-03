@@ -570,23 +570,27 @@ export const FALLBACK_DATA_URL = null
  * id it renders is one the Reader can actually load.
  * ------------------------------------------------------------------ */
 
-/** Readable "Book" labels for the three GitHub JSON categories. */
+/** Readable "Book" labels for the three GitHub JSON categories.
+ *  `short` is the button-sized label; `label` is the fuller heading form. */
 export const CATEGORY_META = [
   {
     key: 'hymns',
     label: 'Hymns / Geet',
+    short: 'Hymns',
     emoji: '🎵',
     blurb: 'The main hymnal - the songs we sing most in our gatherings.'
   },
   {
     key: 'newsong',
     label: 'New Songs',
+    short: 'New Songs',
     emoji: '🎶',
     blurb: 'Newer songs and choruses recently added to the church songbook.'
   },
   {
     key: 'others',
     label: 'Others',
+    short: 'Others',
     emoji: '📖',
     blurb: 'Supplementary songs, choruses and special-number items.'
   }
