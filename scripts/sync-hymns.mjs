@@ -33,11 +33,21 @@ export const AUDIO_BASE = 'https://raw.githubusercontent.com/Church62626/hymns-a
 export const FIREBASE_PROJECT_ID = 'church-in-pakistan-web'
 export const HYMNS_COLLECTION = 'hymns'
 
-/** Only languages that actually have a lyrics folder published on the repo. */
+/**
+ * Languages that actually have a lyrics file published on the repo.
+ *
+ * `file(category)` is the single source of truth for the file name. `unified`
+ * marks a language published as ONE combined file rather than one per category:
+ * Chinese ships a single `hymnal_zh.json` holding all 807 hymns, and its own
+ * `cat`/`subcat` fields carry the real grouping. Mirroring it as three
+ * documents-per-category would be wrong, so it is fetched once and written with
+ * the `hymns` category - which is also the only audio folder that exists.
+ */
 export const SUPPORTED = [
   { key: 'english', file: (c) => `${c}_en.json` },
   { key: 'urdu', file: (c) => (c === 'newsong' ? 'newsongs.json' : `${c}.json`) },
-  { key: 'roman-urdu', file: (c) => `${c}_ru.json` }
+  { key: 'roman-urdu', file: (c) => `${c}_ru.json` },
+  { key: 'chinese', file: () => 'hymnal_zh.json', unified: true, category: 'hymns' }
 ]
 export const CATEGORIES = ['hymns', 'newsong', 'others']
 
@@ -88,13 +98,24 @@ export function normaliseContent(value) {
  * Shape one published entry into a Firestore document.
  * Titles/choruses arrive as arrays of lines; they are joined for display, and
  * `content` keeps every stanza verbatim.
+ *
+ * The Chinese hymnal carries a much richer schema than the other three
+ * languages (verified on main): zh_no, author, composer, scripture, meter and
+ * an en_id/en_title cross-link back to the English hymnal. Those are mapped
+ * here rather than discarded. They are omitted entirely for the other
+ * languages, whose entries have no such fields - so no empty keys are written
+ * and the existing English/Urdu documents are byte-for-byte unchanged.
  */
 export function buildHymnDoc({ language, category, entry }) {
   const id = String(entry?.id ?? '').trim()
   const lines = (v) => (Array.isArray(v) ? v.join('\n') : v == null ? '' : String(v))
   const { mp3Url, midiUrl } = mediaUrls(category, id)
+  const text = (v) => {
+    const s = v == null ? '' : String(v).trim()
+    return s === '' ? null : s
+  }
 
-  return {
+  const doc = {
     id,
     language,
     category,
@@ -106,6 +127,19 @@ export function buildHymnDoc({ language, category, entry }) {
     midiUrl,
     published: true
   }
+
+  // Chinese-only metadata. `cat` is the top-level hymnal section, which is
+  // distinct from the app's `category` (which is the audio/book folder).
+  if (entry?.cat != null) doc.cat = text(entry.cat)
+  if (entry?.zh_no != null) doc.zhNo = Number(entry.zh_no) || entry.zh_no
+  if (entry?.author != null) doc.author = text(entry.author)
+  if (entry?.composer != null) doc.composer = text(entry.composer)
+  if (entry?.scripture != null) doc.scripture = text(entry.scripture)
+  if (entry?.meter != null) doc.meter = text(entry.meter)
+  if (entry?.en_id != null) doc.enId = text(entry.en_id)
+  if (entry?.en_title != null) doc.enTitle = text(entry.en_title)
+
+  return doc
 }
 
 /* --- credentials ---------------------------------------------------------- */
@@ -181,25 +215,51 @@ async function main() {
   const problems = []
 
   for (const language of languages) {
-    for (const category of CATEGORIES) {
+    const spec = SUPPORTED.find((l) => l.key === language)
+    // A unified language (Chinese) publishes ONE file, so it is fetched once
+    // under its real book category instead of once per category - which would
+    // otherwise write the same 807 hymns three times under three doc-id
+    // prefixes, two of which would be duplicates of content that does not
+    // exist as a separate book.
+    const categories = spec?.unified ? [spec.category || 'hymns'] : CATEGORIES
+
+    for (const category of categories) {
       const { entries, url, problem } = await fetchEntries(language, category)
       if (problem) {
         problems.push(`${language}/${category}: ${problem} (${url})`)
         continue
       }
       let added = 0
+      let skippedNoId = 0
       for (const entry of entries) {
         const doc = buildHymnDoc({ language, category, entry })
-        if (!doc.id) continue
+        if (!doc.id) { skippedNoId++; continue }
         docs.push({ docId: hymnDocId(language, category, doc.id), ...doc })
         added++
       }
-      console.log(`  ${language}/${category}: ${added} hymns`)
+      console.log(`  ${language}/${category}: ${added} hymns` +
+        (skippedNoId ? ` (${skippedNoId} skipped: no id)` : ''))
     }
   }
 
   console.log(`\nCollected ${docs.length} hymns from the real published lyrics.`)
   for (const p of problems) console.log(`  ! ${p}`)
+
+  // A duplicate document id means two languages would overwrite each other, and
+  // the loser's lyrics would silently vanish. The id already includes the
+  // language, so this should be empty; it is checked rather than assumed.
+  const seenIds = new Set()
+  const dupes = []
+  for (const d of docs) {
+    if (seenIds.has(d.docId)) dupes.push(d.docId)
+    seenIds.add(d.docId)
+  }
+  if (dupes.length) {
+    console.error(`\nError: ${dupes.length} duplicate document id(s), refusing to write:`)
+    for (const d of dupes.slice(0, 10)) console.error(`  - ${d}`)
+    process.exit(1)
+  }
+  console.log(`  ${seenIds.size} unique document ids (no collisions).`)
 
   if (dryRun) {
     console.log('\n--dry-run: nothing written.')
@@ -247,6 +307,16 @@ async function main() {
         chorus: d.chorus,
         content: d.content,
         subcat: d.subcat,
+        // Chinese-only metadata. Written only when present so existing
+        // English/Urdu documents are untouched by this change.
+        ...(d.cat != null ? { cat: d.cat } : {}),
+        ...(d.zhNo != null ? { zhNo: d.zhNo } : {}),
+        ...(d.author != null ? { author: d.author } : {}),
+        ...(d.composer != null ? { composer: d.composer } : {}),
+        ...(d.scripture != null ? { scripture: d.scripture } : {}),
+        ...(d.meter != null ? { meter: d.meter } : {}),
+        ...(d.enId != null ? { enId: d.enId } : {}),
+        ...(d.enTitle != null ? { enTitle: d.enTitle } : {}),
         mp3Url: d.mp3Url,
         midiUrl: d.midiUrl,
         published: true,

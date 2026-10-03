@@ -478,5 +478,85 @@ ok('every slide points at a real route', slideLinks.length > 0 && slideLinks.eve
   routes.includes(`path: '${p}'`) || p === '/'), slideLinks.join(', '))
 ok('slides do not link to the old /reader', !slideLinks.includes('/reader'))
 
+/* ---- 15. sync script: Chinese is mirrored, others unchanged ---- */
+console.log('\n--- 15. sync-hymns: chinese support ---')
+const hymnSync = await import('./scripts/sync-hymns.mjs')
+const syncSrc = read('./scripts/sync-hymns.mjs')
+
+ok('chinese is in SUPPORTED',
+  hymnSync.SUPPORTED.some((l) => l.key === 'chinese'))
+ok('chinese reads the real file name', /hymnal_zh\.json/.test(syncSrc))
+ok('chinese is marked unified (one file, not three)',
+  hymnSync.SUPPORTED.find((l) => l.key === 'chinese')?.unified === true)
+// A unified language must be fetched once, or 807 hymns get written three times.
+ok('the loop fetches a unified language exactly once',
+  /spec\?\.unified \? \[spec\.category \|\| 'hymns'\] : CATEGORIES/.test(syncSrc))
+ok('it guards against duplicate document ids',
+  /duplicate document id/.test(syncSrc) && /refusing to write/.test(syncSrc))
+ok('english is still a per-category language',
+  hymnSync.SUPPORTED.find((l) => l.key === 'english')?.unified === undefined)
+
+/* --- live Chinese fetch, mapped into a document --- */
+const zhFetch = await hymnSync.fetchEntries('chinese', 'hymns')
+eq('chinese file resolves', zhFetch.problem, null)
+ok('...pointing at hymnal_zh.json', zhFetch.url.endsWith('chinese/hymnal_zh.json'), zhFetch.url)
+eq('...and yields the whole hymnal', zhFetch.entries.length, 807)
+// The file is an object keyed by id, not an array - a naive Array.isArray check
+// would silently mirror zero hymns.
+ok('an object-keyed file is still expanded into entries', zhFetch.entries.length > 0)
+ok('...and every entry has an id',
+  zhFetch.entries.every((e) => e && String(e.id ?? '').trim() !== ''))
+ok('...and every entry has lyrics',
+  zhFetch.entries.every((e) => Array.isArray(e.content) && e.content.length > 0))
+
+const zhDoc = hymnSync.buildHymnDoc({ language: 'chinese', category: 'hymns', entry: zhFetch.entries[0] })
+ok('the doc keeps the title', Boolean(zhDoc.title), zhDoc.title)
+ok('...the lyric stanzas', zhDoc.content.length > 0, String(zhDoc.content.length))
+ok('...the Chinese hymnal number', zhDoc.zhNo != null, String(zhDoc.zhNo))
+ok('...the top-level cat', Boolean(zhDoc.cat), zhDoc.cat)
+ok('...the sub-category', Boolean(zhDoc.subcat), zhDoc.subcat)
+ok('...the author', Boolean(zhDoc.author), zhDoc.author)
+ok('...the composer', Boolean(zhDoc.composer), zhDoc.composer)
+ok('...the meter', Boolean(zhDoc.meter), zhDoc.meter)
+ok('...and the English cross-link', Boolean(zhDoc.enId) && Boolean(zhDoc.enTitle),
+  `${zhDoc.enId} / ${zhDoc.enTitle}`)
+// Audio must point at the folder that actually exists.
+ok('audio points at the real hymns/ folder',
+  zhDoc.mp3Url.includes('/hymns/') && zhDoc.midiUrl.includes('/MIDI/hymns/'),
+  `${zhDoc.mp3Url} | ${zhDoc.midiUrl}`)
+ok('the doc id is language-scoped',
+  hymnSync.hymnDocId('chinese', 'hymns', zhDoc.id).startsWith('chinese-'))
+
+/* --- the other languages must NOT gain Chinese-only keys --- */
+const enFetch = await hymnSync.fetchEntries('english', 'hymns')
+const enDoc = hymnSync.buildHymnDoc({ language: 'english', category: 'hymns', entry: enFetch.entries[0] })
+for (const key of ['zhNo', 'author', 'composer', 'scripture', 'meter', 'enId', 'enTitle']) {
+  ok(`english doc has no "${key}"`, !(key in enDoc), Object.keys(enDoc).join(','))
+}
+eq('english still keeps its own cat', enDoc.cat, enFetch.entries[0].cat)
+eq('english doc id is unchanged',
+  hymnSync.hymnDocId('english', 'hymns', enDoc.id), `english-hymns-${enDoc.id}`)
+
+/* --- a full dry run must not collide across languages --- */
+const ids = new Set()
+let dupes = 0
+for (const lang of hymnSync.SUPPORTED.map((l) => l.key)) {
+  const spec = hymnSync.SUPPORTED.find((l) => l.key === lang)
+  const cats = spec.unified ? [spec.category] : hymnSync.CATEGORIES
+  for (const cat of cats) {
+    const r = await hymnSync.fetchEntries(lang, cat)
+    if (r.problem) continue
+    for (const e of r.entries) {
+      const d = hymnSync.buildHymnDoc({ language: lang, category: cat, entry: e })
+      if (!d.id) continue
+      const id = hymnSync.hymnDocId(lang, cat, d.id)
+      if (ids.has(id)) dupes++
+      ids.add(id)
+    }
+  }
+}
+eq('no document id collides across all four languages', dupes, 0)
+ok('the corpus is substantial', ids.size > 2000, String(ids.size))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)
