@@ -110,7 +110,29 @@ export async function fetchApps() {
   return { apps, problem: '' }
 }
 
-/** Byte count to a short size label. Empty for an unknown size. */
+/**
+ * Split the messages into the newest one and the archive.
+ *
+ * There is NO date field in `life-study.json` (verified: id, messageNumber,
+ * page, title, duration, youtubeUrl, imagePath), so "newest" cannot mean most
+ * recently added. `messageNumber` is the only monotonic ordering the data
+ * offers - it is the book's own message sequence - so the highest number is
+ * treated as the current daily message and the rest become history.
+ *
+ * With a single message published, that message is the current one and the
+ * archive is legitimately empty rather than invented.
+ */
+export function splitLatestAndHistory(episodes) {
+  const list = Array.isArray(episodes) ? episodes.slice() : []
+  if (!list.length) return { latest: null, history: [] }
+
+  // Already sorted by number in fetchLsAudio; take the last, but sort defensively
+  // in case a hand-edited file arrives out of order.
+  const ordered = list.slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
+  const latest = ordered[ordered.length - 1]
+  const history = ordered.slice(0, -1).reverse()
+  return { latest, history }
+}
 export function formatSize(bytes) {
   const n = Number(bytes) || 0
   if (!n) return ''

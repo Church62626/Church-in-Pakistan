@@ -34,7 +34,9 @@
       </section>
 
       <ul v-else class="apps-grid">
-        <li v-for="app in apps" :key="app.id" class="app-card glass-card">
+        <!-- Uniform card geometry: a fixed row height plus a clamped description
+             means one app with a long blurb cannot make the grid ragged. -->
+          <li v-for="app in apps" :key="app.id" class="app-card glass-card">
           <!-- A real icon when the manifest names one that exists, otherwise the
                platform glyph. A broken <img> would look worse than no image. -->
           <img
@@ -75,9 +77,67 @@
               :download="app.file"
             >Download</a>
             <span v-else class="app-unavailable">Unavailable</span>
+
+            <button type="button" class="app-details" @click="detail = app">Details</button>
           </div>
         </li>
       </ul>
+
+      <!-- Full details for one app, opened from its Details button. -->
+      <section
+        v-if="detail"
+        class="detail"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="`${detail.name} details`"
+      >
+        <div class="detail-head">
+          <h2 class="detail-title">{{ detail.name }}</h2>
+          <button type="button" class="btn" @click="detail = null">Close</button>
+        </div>
+
+        <img
+          v-if="detail.icon && detail.iconOk"
+          :src="detail.icon"
+          :alt="`${detail.name} icon`"
+          class="detail-icon"
+        />
+
+        <dl class="detail-specs">
+          <div class="detail-row"><dt>Platform</dt><dd>{{ detail.platform.label }}</dd></div>
+          <div v-if="detail.version" class="detail-row">
+            <dt>Version</dt><dd>{{ detail.version }}</dd>
+          </div>
+          <div v-if="detail.fileSize" class="detail-row">
+            <dt>File size</dt><dd>{{ detail.fileSize }}</dd>
+          </div>
+          <div class="detail-row">
+            <dt>File</dt><dd class="detail-file">{{ detail.file || '—' }}</dd>
+          </div>
+          <div class="detail-row">
+            <dt>Availability</dt>
+            <dd>{{ detail.downloadOk ? 'Ready to download' : 'Not published yet' }}</dd>
+          </div>
+        </dl>
+
+        <h3 class="detail-sub">About this app</h3>
+        <p v-if="detail.description" class="detail-desc">{{ detail.description }}</p>
+        <p v-else class="detail-desc detail-desc-muted">
+          No description has been published for this app yet.
+        </p>
+
+        <div class="detail-actions">
+          <a
+            v-if="detail.downloadOk"
+            class="btn btn-primary"
+            :href="detail.downloadUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            :download="detail.file"
+          >Download</a>
+          <span v-else class="app-unavailable">Not available yet</span>
+        </div>
+      </section>
 
       <footer class="apps-foot">
         <p class="apps-foot-text">
@@ -92,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { fetchAppsRich, APPS_BROWSER_URL } from '../js/appsService.js'
 
 const apps = ref([])
@@ -100,6 +160,13 @@ const loading = ref(true)
 const problem = ref('')
 const problemTitle = ref('')
 const problemText = ref('')
+/** The app whose details panel is open, or null. */
+const detail = ref(null)
+
+/** Escape closes the details panel. */
+function onKeydown(e) {
+  if (e.key === 'Escape' && detail.value) detail.value = null
+}
 
 /** Honest copy per failure. None of these blame the visitor. */
 const PROBLEM_COPY = {
@@ -149,7 +216,12 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  document.addEventListener('keydown', onKeydown)
+})
+
+onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 </script>
 
 <style scoped>
@@ -221,9 +293,12 @@ onMounted(load)
 }
 
 .app-card {
+  /* Uniform height on every card, so one app with a long description cannot
+     make the grid ragged. The description is clamped to fit inside it. */
   display: flex;
   align-items: flex-start;
   gap: 16px;
+  min-height: 190px;
   padding: 20px;
   border-radius: 18px;
 }
@@ -254,7 +329,100 @@ onMounted(load)
   font-size: 0.9rem;
   line-height: 1.6;
   color: var(--text-secondary);
+  /* Clamped so a long description cannot stretch the card past the fixed
+     height. The full text is always available in the Details panel. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+
+/* Details button: same size as Download so the pair reads as one control. */
+.app-details {
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.app-details:hover { background: rgba(127, 127, 127, 0.16); }
+
+/* ---- details panel --------------------------------------------------- */
+.detail {
+  margin-top: 24px;
+  padding: 26px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.detail-title { margin: 0; font-size: 1.3rem; font-weight: 800; color: var(--text-primary); }
+
+.detail-icon {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+}
+
+.detail-specs {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.08));
+}
+
+.detail-row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 0.92rem;
+}
+
+.detail-row dt {
+  flex-shrink: 0;
+  width: 108px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.detail-row dd { margin: 0; color: var(--text-primary); }
+
+.detail-file { overflow-wrap: anywhere; }
+
+.detail-sub {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.detail-desc { margin: 0 0 20px; font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
+
+.detail-desc-muted { color: var(--text-secondary); font-style: italic; }
+
+.detail-actions { display: flex; gap: 10px; }
 
 /* A manifest entry whose binary was never uploaded. Informational, not an
    error: the visitor did nothing wrong. */

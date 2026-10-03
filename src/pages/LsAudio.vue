@@ -17,41 +17,35 @@
         </p>
       </section>
 
-      <ul v-else class="list">
-        <li v-for="ep in episodes" :key="ep.id" class="ep">
-          <div class="ep-head">
-            <div class="ep-body">
-              <p class="ep-title">
-                <span v-if="ep.number" class="ep-no">Message {{ ep.number }}</span>
-                {{ ep.title }}
-              </p>
-              <p v-if="ep.duration || ep.page" class="ep-meta">
-                <span v-if="ep.duration">{{ ep.duration }}</span>
-                <span v-if="ep.page">Page {{ ep.page }}</span>
-              </p>
-            </div>
-
-            <div class="ep-actions">
-              <button v-if="ep.imageUrl" type="button" class="btn" @click="reading = ep">
-                Read
-              </button>
-              <button
-                v-if="ep.embedUrl"
-                type="button"
-                class="btn btn-primary"
-                :aria-pressed="playingId === ep.id"
-                @click="toggleVideo(ep)"
-              >{{ playingId === ep.id ? 'Hide' : 'Watch' }}</button>
-            </div>
+      <template v-else>
+        <!-- Today's message, featured. `latest` is the highest messageNumber,
+             which is the only ordering the data carries. -->
+        <section v-if="latest" class="featured glass-card">
+          <p class="featured-eyebrow">Latest message</p>
+          <p class="featured-title">
+            <span v-if="latest.number" class="ep-no">Message {{ latest.number }}</span>
+            {{ latest.title }}
+          </p>
+          <p v-if="latest.duration || latest.page" class="featured-meta">
+            <span v-if="latest.duration">{{ latest.duration }}</span>
+            <span v-if="latest.page">Page {{ latest.page }}</span>
+          </p>
+          <div class="featured-actions">
+            <button v-if="latest.imageUrl" type="button" class="btn" @click="reading = latest">
+              Read
+            </button>
+            <button
+              v-if="latest.embedUrl"
+              type="button"
+              class="btn btn-primary"
+              @click="toggleVideo(latest)"
+            >{{ playingId === latest.id ? 'Hide' : 'Watch' }}</button>
           </div>
-
-          <!-- Only the selected message mounts an iframe, so the page never
-               loads several YouTube players (and their tracking) at once. -->
-          <div v-if="playingId === ep.id && ep.embedUrl" class="ep-player">
+          <div v-if="playingId === latest.id && latest.embedUrl" class="ep-player">
             <iframe
-              :key="ep.id"
-              :src="ep.embedUrl"
-              :title="ep.title"
+              :key="latest.id"
+              :src="latest.embedUrl"
+              :title="latest.title"
               class="ep-frame"
               loading="lazy"
               referrerpolicy="strict-origin-when-cross-origin"
@@ -59,8 +53,53 @@
               allowfullscreen
             ></iframe>
           </div>
-        </li>
-      </ul>
+        </section>
+
+        <!-- Everything before it, kept as an archive rather than a flat list. -->
+        <section v-if="history.length" class="history">
+          <h2 class="history-title">History ({{ history.length }})</h2>
+          <ul class="list">
+            <li v-for="ep in history" :key="ep.id" class="ep">
+              <div class="ep-head">
+                <div class="ep-body">
+                  <p class="ep-title">
+                    <span v-if="ep.number" class="ep-no">Message {{ ep.number }}</span>
+                    {{ ep.title }}
+                  </p>
+                  <p v-if="ep.duration || ep.page" class="ep-meta">
+                    <span v-if="ep.duration">{{ ep.duration }}</span>
+                    <span v-if="ep.page">Page {{ ep.page }}</span>
+                  </p>
+                </div>
+                <div class="ep-actions">
+                  <button v-if="ep.imageUrl" type="button" class="btn" @click="reading = ep">
+                    Read
+                  </button>
+                  <button
+                    v-if="ep.embedUrl"
+                    type="button"
+                    class="btn btn-primary"
+                    :aria-pressed="playingId === ep.id"
+                    @click="toggleVideo(ep)"
+                  >{{ playingId === ep.id ? 'Hide' : 'Watch' }}</button>
+                </div>
+              </div>
+              <div v-if="playingId === ep.id && ep.embedUrl" class="ep-player">
+                <iframe
+                  :key="ep.id"
+                  :src="ep.embedUrl"
+                  :title="ep.title"
+                  class="ep-frame"
+                  loading="lazy"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowfullscreen
+                ></iframe>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </template>
 
       <!-- Companion image viewer, opened by the "Read" button. -->
       <section
@@ -81,12 +120,16 @@
 </template>
 @@S@@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { fetchLsAudio } from '../js/appsService.js'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { fetchLsAudio, splitLatestAndHistory } from '../js/appsService.js'
 
 const episodes = ref([])
 const book = ref(null)
 const loading = ref(true)
+/** The newest message, featured at the top. */
+const latest = ref(null)
+/** Every earlier message, newest first, kept as an archive. */
+const history = ref([])
 /** Id of the message whose video is mounted, or '' for none. */
 const playingId = ref('')
 /** The message whose image is open, or null. */
@@ -107,6 +150,11 @@ async function load() {
     const result = await fetchLsAudio()
     episodes.value = result.episodes
     book.value = result.book
+    // The newest message is featured; everything before it becomes history, so
+    // adding a daily entry never grows the active list.
+    const split = splitLatestAndHistory(result.episodes)
+    latest.value = split.latest
+    history.value = split.history
   } finally {
     loading.value = false
   }
@@ -132,6 +180,55 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .notice-icon { font-size: 40px; margin-bottom: 10px; }
 .notice-title { margin: 0 0 8px; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); }
 .notice-text { margin: 0 auto; max-width: 46ch; color: var(--text-secondary); line-height: 1.6; }
+
+/* ---- featured (latest) message -------------------------------------- */
+.featured {
+  padding: 24px;
+  border-radius: 20px;
+  margin-bottom: 28px;
+  /* A subtle accent edge so the current message reads as distinct from the
+     archive without shouting about it. */
+  border-left: 3px solid var(--primary-color, #4f7cff);
+}
+
+.featured-eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--primary-color, #4f7cff);
+}
+
+.featured-title {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.featured-meta {
+  margin: 0 0 14px;
+  display: flex;
+  gap: 12px;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+}
+
+.featured-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- history archive ------------------------------------------------- */
+.history { margin-top: 8px; }
+
+.history-title {
+  margin: 0 0 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-secondary);
+}
 
 .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 

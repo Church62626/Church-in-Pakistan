@@ -128,6 +128,7 @@ const { fetchCatalog, fetchHymn, CATEGORY_META, normaliseCategory, getAudioUrl,
   hymnErrorMessage, isHymnMissing, parseDuo, chorusLabel, buildHymnLayout,
   normalizeHymn } =
   await import('./src/js/hymnService.js')
+const { splitLatestAndHistory } = await import('./src/js/appsService.js')
 
 eq('CATEGORY_META has 3 books', CATEGORY_META.length, 3)
 eq('first book label', CATEGORY_META[0].label, 'Hymns / Geet')
@@ -833,6 +834,49 @@ ok('downloads are real links with a download attribute',
   /:download="app\.file"/.test(appsPage))
 ok('the service merges manifest entries with loose APK files',
   /export async function fetchAppsRich/.test(as) && /claimed/.test(as))
+
+// Apps: fixed-size cards with two buttons and an in-app details panel.
+ok('app cards have a uniform minimum height',
+  /\.app-card \{[\s\S]{0,240}min-height: \d+px/.test(appsPage))
+ok('the card description is clamped so cards stay equal height',
+  /-webkit-line-clamp: 3/.test(appsPage) && /line-clamp: 3/.test(appsPage))
+ok('each card offers Download and Details',
+  /app-download/.test(appsPage) && /class="app-details"/.test(appsPage) &&
+  /openDetails|detail = app/.test(appsPage))
+ok('the details panel shows platform, version, size and description',
+  /class="detail-specs"/.test(appsPage) && /Platform/.test(appsPage) &&
+  /Version/.test(appsPage) && /File size/.test(appsPage) &&
+  /detail\.description/.test(appsPage))
+ok('the details panel is a labelled dialog and closes on Escape',
+  /role="dialog"/.test(appsPage) && /aria-modal="true"/.test(appsPage) &&
+  /detail\.value = null/.test(appsPage))
+ok('an unavailable app has no download anchor anywhere',
+  !/app\.downloadUrl \|\| app\.pageUrl/.test(appsPage) &&
+  /v-if="detail\.downloadOk"/.test(appsPage))
+
+// LS: newest featured, earlier messages archived. There is NO date field in
+// life-study.json, so ordering must come from messageNumber.
+ok('the LS service splits latest from history',
+  /export function splitLatestAndHistory/.test(as))
+const splitOne = splitLatestAndHistory([{ number: 20, id: 'a' }])
+ok('a single message is the latest, with an empty archive',
+  splitOne.latest?.number === 20 && splitOne.history.length === 0)
+const splitMany = splitLatestAndHistory([
+  { number: 10, id: 'a' }, { number: 20, id: 'b' }, { number: 30, id: 'c' }
+])
+ok('the highest message number is the latest', splitMany.latest?.number === 30)
+ok('earlier messages become history, newest first',
+  splitMany.history.map((e) => e.number).join(',') === '20,10')
+ok('out-of-order input is still sorted',
+  splitLatestAndHistory([{ number: 30, id: 'c' }, { number: 10, id: 'a' }]).latest?.number === 30)
+ok('no messages yields no latest and no history',
+  splitLatestAndHistory([]).latest === null && splitLatestAndHistory([]).history.length === 0)
+ok('the LS page features the latest message',
+  /v-if="latest" class="featured/.test(read('./src/pages/LsAudio.vue')) &&
+  /Latest message/.test(read('./src/pages/LsAudio.vue')))
+ok('...and archives the rest separately',
+  /v-if="history\.length" class="history"/.test(read('./src/pages/LsAudio.vue')) &&
+  /History \(/.test(read('./src/pages/LsAudio.vue')))
 // "Could not load" and "there are no apps" are different facts; conflating them
 // would tell a visitor their download is gone when it is only a network blip.
 ok('an empty folder and a failed lookup render different states',
