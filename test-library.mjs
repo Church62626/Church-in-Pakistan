@@ -756,5 +756,64 @@ ok('the global keypad honours the theme tokens',
 ok('no !important in the global keypad rules',
   !/\.keypad[\s\S]{0,400}!important/.test(globalCss))
 
+console.log('\n--- 22. apps catalogue + /apps screen ---')
+// The Apps screen is driven entirely by the church-apps folder on GitHub, so
+// these assert the service contract rather than a hard-coded app list (the
+// folder is currently empty and must populate itself when a build is added).
+const as = read('./src/js/appsService.js')
+const appsPage = read('./src/pages/Apps.vue')
+const routesTxt = read('./src/router/index.js')
+const navTxt = read('./src/components/AppNavigation.vue')
+
+ok('the apps service points at the church-apps folder',
+  /church-apps/.test(as) && /Church62626\/Church-in-Pakistan/.test(as))
+ok('it reads the folder over the GitHub contents API',
+  /api\.github\.com\/repos\/\$\{APPS_REPO\}\/contents\/\$\{APPS_PATH\}/.test(as))
+ok('the folder ref is pinned to a commit, not a moving branch',
+  /APPS_REF\s*=\s*'[0-9a-f]{40}'/.test(as) && !/APPS_REF\s*=\s*'main'/.test(as))
+// church-apps.txt is a placeholder, not a download. Rendering it as an app
+// would show a visitor an empty file with a Download button.
+ok('the placeholder txt is excluded from the app list',
+  /NON_APP_FILES/.test(as) && /church-apps/.test(as))
+ok('the hymnal service stays free of pinned hashes',
+  !/[0-9a-f]{40}/.test(read('./src/js/hymnService.js')))
+ok('fetchApps reports problems instead of throwing',
+  /return \{ apps: \[\], problem: /.test(as))
+ok('...including a dedicated rate-limit case',
+  /'rate-limited'/.test(as) && /403\|429|\b429\b/.test(as))
+ok('formatSize is exported and guards a zero size',
+  /export function formatSize/.test(as) && /if \(!n\) return ''/.test(as))
+
+ok('/apps is routed', /path: '\/apps'/.test(routesTxt))
+ok('the route is named and bound to the page',
+  /name: 'Apps'/.test(routesTxt) && /component: Apps/.test(routesTxt))
+ok('the nav exposes a Products dropdown',
+  /nav-products/.test(navTxt) && /Products/.test(navTxt))
+ok('the dropdown opens on hover, focus and click',
+  /@mouseenter="openProducts"/.test(navTxt) &&
+  /@focusin="openProducts"/.test(navTxt) &&
+  /productsOpen \? closeProducts\(\) : openProducts\(\)/.test(navTxt))
+// A close with no delay makes the menu vanish while the pointer is still
+// travelling down into it, which reads as a broken control.
+ok('the close is delayed so hover travel is not interrupted',
+  /setTimeout\(/.test(navTxt) && /function closeProducts\(\)/.test(navTxt))
+ok('Escape closes it immediately',
+  /Escape/.test(navTxt) && /closeProductsNow/.test(navTxt))
+ok('the close timer is cleared on unmount',
+  /onUnmounted[\s\S]{0,400}productsCloseTimer/.test(navTxt))
+ok('Apps appears in the mobile menu too',
+  /to="\/apps"[\s\S]{0,200}mobile-link/.test(navTxt))
+
+ok('the Apps page reads the service, not a hard-coded list',
+  /from '\.\.\/js\/appsService\.js'/.test(appsPage) && /fetchApps\(/.test(appsPage))
+// "Could not load" and "there are no apps" are different facts; conflating them
+// would tell a visitor their download is gone when it is only a network blip.
+ok('an empty folder and a failed lookup render different states',
+  /v-else-if="problem"/.test(appsPage) && /v-else-if="!apps\.length"/.test(appsPage))
+ok('both states still offer the GitHub folder link',
+  (appsPage.match(/APPS_BROWSER_URL/g) || []).length >= 3)
+ok('downloads are real links with a github page fallback',
+  /app\.downloadUrl \|\| app\.pageUrl/.test(appsPage) && /rel="noopener noreferrer"/.test(appsPage))
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===\n`)
 process.exit(fail === 0 ? 0 : 1)

@@ -6,6 +6,7 @@ import Library from '../pages/Library.vue'
 import Store from '../pages/Store.vue'
 import Events from '../pages/Events.vue'
 import About from '../pages/About.vue'
+import Apps from '../pages/Apps.vue'
 
 const routes = [
   {
@@ -45,6 +46,11 @@ const routes = [
     path: '/events',
     name: 'Events',
     component: Events
+  },
+  {
+    path: '/apps',
+    name: 'Apps',
+    component: Apps
   },
   {
     path: '/about',

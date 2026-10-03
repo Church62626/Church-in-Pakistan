@@ -16,6 +16,54 @@
           <span class="nav-icon">{{ item.icon }}</span>
           {{ item.title }}
         </router-link>
+
+        <!-- Products: a hover/click dropdown, not a plain link, because the
+             apps live on GitHub and the folder is the real source of truth. -->
+        <div
+          class="nav-products"
+          @mouseenter="openProducts"
+          @mouseleave="closeProducts"
+          @focusin="openProducts"
+        >
+          <button
+            type="button"
+            class="nav-link products-trigger"
+            :class="{ active: productsOpen }"
+            :aria-expanded="productsOpen"
+            aria-haspopup="true"
+            @click="productsOpen ? closeProducts() : openProducts()"
+          >
+            <span class="nav-icon" aria-hidden="true">📦</span>
+            Products
+            <span class="products-caret" aria-hidden="true">▾</span>
+          </button>
+
+          <transition name="products-drop">
+            <div v-if="productsOpen" class="products-menu" role="menu">
+              <router-link to="/apps" class="products-item" role="menuitem" @click="closeProducts">
+                <span class="products-icon" aria-hidden="true">📱</span>
+                <span class="products-body">
+                  <span class="products-title">Apps</span>
+                  <span class="products-text">Download the hymnal app</span>
+                </span>
+              </router-link>
+              <a
+                class="products-item"
+                role="menuitem"
+                :href="APPS_BROWSER_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="closeProducts"
+              >
+                <span class="products-icon" aria-hidden="true">📂</span>
+                <span class="products-body">
+                  <span class="products-title">Apps folder</span>
+                  <span class="products-text">Browse the builds on GitHub</span>
+                </span>
+              </a>
+            </div>
+          </transition>
+        </div>
       </div>
 
       <!-- Right Actions -->
@@ -62,6 +110,15 @@
         >
           <span class="mobile-icon">{{ item.icon }}</span>
           {{ item.title }}
+        </router-link>
+        <router-link
+          to="/apps"
+          class="mobile-link"
+          active-class="active"
+          @click="mobileMenuOpen = false"
+        >
+          <span class="mobile-icon" aria-hidden="true">📦</span>
+          Apps
         </router-link>
         <div class="mobile-actions">
           <LanguageSelector v-model="language" @change="onLanguageChange" />
@@ -147,6 +204,7 @@ import {
   resolveInitialLanguage as initialLanguage
 } from '../js/hymnService.js'
 import logoImage from '../assets/logo.png'
+import { APPS_BROWSER_URL } from '../js/appsService.js'
 
 const FEEDBACK_EMAIL = 'churchpakistan52@gmail.com'
 const LANG_STORAGE_KEY = 'cip.language'
@@ -155,6 +213,39 @@ const mobileMenuOpen = ref(false)
 const authOpen = ref(false)
 const authMode = ref('login')
 const logoOpen = ref(false)
+
+/* ---- Products dropdown -------------------------------------------------
+ * Opens on hover, focus and click. The close is delayed by a short timer so
+ * moving the pointer from the trigger down into the menu does not dismiss it
+ * mid-travel - without that, the menu closes before the pointer arrives and
+ * the control feels broken. Keyboard users get focus-driven open and Escape /
+ * Tab to close, so the delay never traps them. */
+const productsOpen = ref(false)
+let productsCloseTimer = null
+
+function openProducts() {
+  if (productsCloseTimer) {
+    clearTimeout(productsCloseTimer)
+    productsCloseTimer = null
+  }
+  productsOpen.value = true
+}
+
+function closeProducts() {
+  if (productsCloseTimer) clearTimeout(productsCloseTimer)
+  productsCloseTimer = setTimeout(() => {
+    productsOpen.value = false
+    productsCloseTimer = null
+  }, 180)
+}
+
+function closeProductsNow() {
+  if (productsCloseTimer) {
+    clearTimeout(productsCloseTimer)
+    productsCloseTimer = null
+  }
+  productsOpen.value = false
+}
 
 /** Global language. Seeded from localStorage, then from the ?lang= query so a
  *  shared link lands in the right language, then the default. */
@@ -230,7 +321,13 @@ async function logout() {
 
 let unsubscribeAuth = null
 
+/** Escape closes the Products menu immediately, skipping the hover delay. */
+function onKeydown(e) {
+  if (e.key === 'Escape' && productsOpen.value) closeProductsNow()
+}
+
 onMounted(() => {
+  document.addEventListener('keydown', onKeydown)
   // Keep the navbar in sync with the Firebase session
   unsubscribeAuth = authMethods.onAuthChange((firebaseUser) => {
     user.value = firebaseUser ? { email: firebaseUser.email } : null
@@ -238,6 +335,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown)
+  if (productsCloseTimer) {
+    clearTimeout(productsCloseTimer)
+    productsCloseTimer = null
+  }
   if (unsubscribeAuth) {
     unsubscribeAuth()
     unsubscribeAuth = null
@@ -246,7 +348,89 @@ onUnmounted(() => {
 </script>
 
 
+
 <style scoped>
+/* ---- Products dropdown ----------------------------------------------- */
+.nav-products {
+  position: relative;
+}
+
+.products-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.products-caret { font-size: 0.7rem; opacity: 0.7; }
+
+.products-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  padding: 6px;
+  border-radius: 14px;
+  /* Matches the glass surfaces used elsewhere. */
+  background: var(--surface);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+}
+
+.products-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.products-item:hover,
+.products-item:focus-visible {
+  background: rgba(127, 127, 127, 0.16);
+  outline: none;
+}
+
+.products-icon { font-size: 1.1rem; }
+
+.products-body { display: flex; flex-direction: column; }
+
+.products-title { font-size: 0.92rem; font-weight: 600; }
+
+.products-text { font-size: 0.8rem; color: var(--text-secondary); }
+
+/* Opacity + a short rise only: the menu is absolutely positioned, so it never
+   reflows the page and cannot cause the layout shift that scroll-locking did.
+   Reduced-motion users get an instant appear. */
+.products-drop-enter-active,
+.products-drop-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.products-drop-enter-from,
+.products-drop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .products-drop-enter-active,
+  .products-drop-leave-active { transition: none; }
+}
+
+@media (max-width: 900px) {
+  /* On small screens the desktop row (and this dropdown) is hidden behind the
+     hamburger, and Apps is a plain mobile-menu link instead. */
+  .nav-products { display: none; }
+}
 .nav-container {
   max-width: 1280px;
   margin: 0 auto;
